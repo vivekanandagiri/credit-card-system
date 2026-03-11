@@ -141,7 +141,58 @@ mvn test
 
 ---
 
+## API Documentation
+
+Swagger UI is available at:
+
+http://localhost:8082/swagger-ui/index.html
+
+Example API endpoints:
+
+* POST /api/auth/register
+* POST /api/auth/login
+* GET /api/credit-products
+* POST /api/credit-card-applications
+
+Swagger Screenshot:
+
+(Add screenshot of Swagger UI here)
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/9388ea22-9e30-4f62-b283-87b21faae3e3" />
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/4c7476a6-d0be-4bb9-a7ce-69fe3e1be3fa" />
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/6f944ca2-be2f-42b2-9634-b7db3e2232d9" />
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/413b42ed-52a8-4822-8a37-125c031fa685" />
 ## 
+## Architecture
+
+The application follows a layered architecture:
+
+Controller Layer
+Handles HTTP requests and responses.
+
+Service Layer
+Contains business logic.
+
+Repository Layer
+Handles database interaction using Spring Data JPA.
+
+Security Layer
+Manages authentication and authorization using JWT.
+
+Underwriting Engine
+Evaluates credit card applications using configurable rules and risk scoring.
+## ## Features Implemented
+
+* JWT Authentication
+* Role-Based Access Control
+* Credit Card Application Workflow
+* KYC Verification
+* Customer Profile Management
+* Flyway Database Migration
+* Risk Scoring Engine
+* Underwriting Decision System
+* RESTful API Design
+* Unit Testing with JUnit
+
 
 **Vivekananda Giri**
 
