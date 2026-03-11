@@ -141,8 +141,8 @@ mvn test
 
 ---
 
-## Author
+## 
 
-**Vivek**
+**Vivekananda Giri**
 
 Software Engineer | Backend Developer | Java & Spring Boot
