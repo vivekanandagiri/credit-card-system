@@ -25,8 +25,8 @@ public class CreditCardApplication extends BaseEntity {
     private Customer customer;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "card_product_id", nullable = false)
-    private CreditCardProduct cardProduct;
+    @JoinColumn(name = "credit_product_id", nullable = false)
+    private CreditProduct creditProduct;
 
     // Employment
     @Enumerated(EnumType.STRING)

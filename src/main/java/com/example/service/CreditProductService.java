@@ -3,13 +3,15 @@ package com.example.service;
 import com.example.dto.request.CreditProductCreateRequest;
 import com.example.dto.request.CreditProductUpdateRequest;
 import com.example.dto.response.ApiResponse;
+import com.example.dto.response.CreditProductCreateResponse;
 import com.example.dto.response.CreditProductResponse;
+import com.example.enums.ProductStatus;
 
 import java.util.List;
 
 public interface CreditProductService {
 
-    ApiResponse<CreditProductResponse> create(CreditProductCreateRequest request);
+    ApiResponse<CreditProductCreateResponse> create(CreditProductCreateRequest request);
 
     ApiResponse<CreditProductResponse> getById(Long id);
 
@@ -19,5 +21,5 @@ public interface CreditProductService {
 
     ApiResponse<CreditProductResponse> update(Long id, CreditProductUpdateRequest request);
 
-    ApiResponse<String> deactivate(Long id);
+    ApiResponse<String> updateStatus(Long id,ProductStatus status);
 }

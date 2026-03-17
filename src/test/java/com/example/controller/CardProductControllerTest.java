@@ -26,6 +26,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.example.dto.request.CardProductCreateRequest;
 import com.example.dto.request.CardProductUpdateRequest;
 import com.example.dto.response.ApiResponse;
+import com.example.dto.response.CardProductCreateResponse;
 import com.example.dto.response.CardProductResponse;
 import com.example.enums.CardType;
 import com.example.enums.NetworkType;
@@ -72,29 +73,16 @@ class CardProductControllerTest {
 
             UUID id = UUID.randomUUID();
 
-            CardProductResponse response = new CardProductResponse(
-                    id,
-                    1L,
-                    "Gold Credit Product",
-                    "Gold Visa Card",
-                    NetworkType.VISA,
-                    CardType.PHYSICAL,
-                    new BigDecimal("1999"),
-                    5,
-                    true,
-                    true,
-                    true,
-                    true,
-                    new BigDecimal("25000"),
-                    new BigDecimal("100000"),
-                    new BigDecimal("75000"),
-                    15,
-                    new BigDecimal("3.50"),
-                    "Premium gold card",
-                    ProductStatus.ACTIVE
-            );
 
-            ApiResponse<CardProductResponse> apiResponse =
+            CardProductCreateResponse response =
+                    new CardProductCreateResponse(
+                            id,
+                            "Gold Visa Card",
+                            NetworkType.VISA,
+                            ProductStatus.ACTIVE
+                    );
+
+            ApiResponse<CardProductCreateResponse> apiResponse =
                     ApiResponse.success(201, "Card product created", response);
 
             when(cardProductService.create(any(CardProductCreateRequest.class)))
@@ -300,27 +288,31 @@ class CardProductControllerTest {
         }
     }
 
-    // DEACTIVATE
+ // UPDATE STATUS
     @Nested
-    @DisplayName("Deactivate Card Product Tests")
-    class DeactivateTests {
-
+    @DisplayName("Update Card Product Status Tests")
+    class UpdateStatusTests {
         @Test
-        void deactivate_success() throws Exception {
+        void updateStatus_deactivate_success() throws Exception {
 
             UUID id = UUID.randomUUID();
 
             ApiResponse<String> apiResponse =
-                    ApiResponse.success(200, "Card product deactivated", "Success");
+                    ApiResponse.success(200, "Card product deactivated successfully", "INACTIVE");
 
-            when(cardProductService.deactivate(any(UUID.class)))
+            when(cardProductService.updateStatus(any(UUID.class), any(ProductStatus.class)))
                     .thenReturn(apiResponse);
 
-            mockMvc.perform(patch("/api/v1/card-products/{id}/deactivate", id))
+            mockMvc.perform(
+                    patch("/api/v1/card-products/{id}/status", id)
+                            .param("status", "INACTIVE")
+            )
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.message").value("Card product deactivated"));
+                    .andExpect(jsonPath("$.message")
+                            .value("Card product deactivated successfully"));
 
-            verify(cardProductService, times(1)).deactivate(any(UUID.class));
+            verify(cardProductService, times(1))
+                    .updateStatus(any(UUID.class), eq(ProductStatus.INACTIVE));
         }
     }
 }

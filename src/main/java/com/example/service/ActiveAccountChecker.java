@@ -20,7 +20,7 @@ import java.util.UUID;
  *    — Queries the issued_cards table via IssuedCardRepository.
  *    — Remove @Primary from NoOpActiveCardChecker and add it here.
  */
-public interface ActiveCardChecker {
+public interface ActiveAccountChecker {
 
     /**
      * Returns true if the customer already has an active card
@@ -30,5 +30,5 @@ public interface ActiveCardChecker {
      * @param cardProductId UUID of the card product being applied for
      * @return true if active card exists, false otherwise
      */
-    boolean hasActiveCard(UUID customerId, UUID cardProductId);
+	boolean hasActiveAccount(UUID customerId, Long creditProductId);
 }

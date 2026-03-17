@@ -12,6 +12,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.example.dto.request.KycVerifyRequest;
 import com.example.dto.response.ApiResponse;
 import com.example.dto.response.KycResponse;
+import com.example.enums.KycStatus;
 import com.example.security.CustomUserPrincipal;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -71,7 +72,8 @@ public interface KycApi {
     })
     @GetMapping("/status")
     ResponseEntity<ApiResponse<KycResponse>> getStatus(
-            @AuthenticationPrincipal CustomUserPrincipal principal
+            @AuthenticationPrincipal CustomUserPrincipal principal,
+            KycStatus status
     );
 
     // =====================================================

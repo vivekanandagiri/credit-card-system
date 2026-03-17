@@ -3,19 +3,18 @@ package com.example.service;
 import com.example.dto.request.ApplicationDecisionRequest;
 import com.example.dto.request.CreditCardApplicationRequest;
 import com.example.dto.response.ApiResponse;
-import com.example.dto.response.CardProductResponse;
+import com.example.dto.response.CreditCardApplicationCreateResponse;
 import com.example.dto.response.CreditCardApplicationResponse;
-
 import java.util.List;
 import java.util.UUID;
 
 public interface CreditCardApplicationService {
 
     // Customer — view available card products before applying
-    ApiResponse<List<CardProductResponse>> getAvailableCardProducts();
+	// ApiResponse<List<CreditProductResponse>> getAvailableCreditProducts();
 
     // Customer — submit application
-    ApiResponse<CreditCardApplicationResponse> apply(UUID userId,
+    ApiResponse<CreditCardApplicationCreateResponse> apply(UUID userId,
                                                      CreditCardApplicationRequest request);
 
     // Customer — view own applications
@@ -24,7 +23,9 @@ public interface CreditCardApplicationService {
     // Customer — view single application
     ApiResponse<CreditCardApplicationResponse> getMyApplicationById(UUID userId,
                                                                     UUID applicationId);
-
+    //Customer -view single Application
+    ApiResponse<CreditCardApplicationResponse> getApplicationById(UUID applicationId);
+    
     // Admin — view all applications
     ApiResponse<List<CreditCardApplicationResponse>> getAllApplications();
 
@@ -34,4 +35,6 @@ public interface CreditCardApplicationService {
     // Admin — manually approve or reject (for PENDING_REVIEW cases)
     ApiResponse<CreditCardApplicationResponse> decide(UUID applicationId,
                                                       ApplicationDecisionRequest request);
+
+	
 }

@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import com.example.dto.request.CardProductCreateRequest;
 import com.example.dto.request.CardProductUpdateRequest;
 import com.example.dto.response.ApiResponse;
+import com.example.dto.response.CardProductCreateResponse;
 import com.example.dto.response.CardProductResponse;
 import com.example.entity.CreditCardProduct;
 import com.example.entity.CreditProduct;
@@ -46,7 +47,7 @@ public class CardProductServiceImpl implements CardProductService {
 
     // CREATE CARD PRODUCT
     @Override
-    public ApiResponse<CardProductResponse> create(CardProductCreateRequest request) {
+    public ApiResponse<CardProductCreateResponse> create(CardProductCreateRequest request) {
 
         CreditProduct creditProduct = creditProductRepository
                 .findById(request.getCreditProductId())
@@ -83,11 +84,10 @@ public class CardProductServiceImpl implements CardProductService {
         CreditCardProduct cardProduct =
                 mapper.toEntity(request, creditProduct);
 
-        CardProductResponse response =
-                mapper.toResponse(cardProductRepository.save(cardProduct));
+        CreditCardProduct saved = cardProductRepository.save(cardProduct);
 
-        return new ApiResponse<>(
-                Instant.now(),
+        CardProductCreateResponse response = mapper.toCreateResponse(saved)   ;     
+        return ApiResponse.success(
                 HttpStatus.CREATED.value(),
                 "Card product created successfully",
                 response
@@ -101,8 +101,7 @@ public class CardProductServiceImpl implements CardProductService {
         CardProductResponse response =
                 mapper.toResponse(findById(id));
 
-        return new ApiResponse<>(
-                Instant.now(),
+        return ApiResponse.success(
                 HttpStatus.OK.value(),
                 "Credit Card product fetched successfully",
                 response
@@ -200,24 +199,30 @@ public class CardProductServiceImpl implements CardProductService {
 
     // DEACTIVATE CARD PRODUCT
     @Override
-    public ApiResponse<String> deactivate(UUID id) {
+    public ApiResponse<String> updateStatus(UUID id, ProductStatus status) {
 
         CreditCardProduct card = findById(id);
 
-        if (card.getStatus() == ProductStatus.INACTIVE) {
+        // Prevent updating to the same status
+        if (card.getStatus() == status) {
             throw new BadRequestException(
-                    "Card product is already inactive");
+                    "Card product is already " + status.name().toLowerCase());
         }
 
-        card.setStatus(ProductStatus.INACTIVE);
+        // Update status
+        card.setStatus(status);
 
         cardProductRepository.save(card);
+
+        String message = status == ProductStatus.ACTIVE
+                ? "Card product activated successfully"
+                : "Card product deactivated successfully";
 
         return new ApiResponse<>(
                 Instant.now(),
                 HttpStatus.OK.value(),
-                "Card product deactivated successfully",
-                "Deactivated"
+                message,
+                status.name()
         );
     }
 

@@ -6,11 +6,13 @@ import java.util.UUID;
 import com.example.dto.request.CardProductCreateRequest;
 import com.example.dto.request.CardProductUpdateRequest;
 import com.example.dto.response.ApiResponse;
+import com.example.dto.response.CardProductCreateResponse;
 import com.example.dto.response.CardProductResponse;
+import com.example.enums.ProductStatus;
 
 public interface CardProductService {
 
-    ApiResponse<CardProductResponse> create(CardProductCreateRequest request);
+    ApiResponse<CardProductCreateResponse> create(CardProductCreateRequest request);
 
     ApiResponse<CardProductResponse> getById(UUID id);
 
@@ -22,5 +24,5 @@ public interface CardProductService {
 
     ApiResponse<CardProductResponse> update(UUID id, CardProductUpdateRequest request);
 
-    ApiResponse<String> deactivate(UUID id);
+    ApiResponse<String> updateStatus(UUID id,ProductStatus status);
 }

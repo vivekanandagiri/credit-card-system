@@ -1,7 +1,6 @@
 package com.example.service.ServiceImpl;
 
-import com.example.service.ActiveCardChecker;
-import org.springframework.context.annotation.Primary;
+import com.example.service.ActiveAccountChecker;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
@@ -19,13 +18,13 @@ import java.util.UUID;
  * 2. Add @Primary to IssuedCardActiveCardChecker
  * No other code changes needed.
  */
-@Primary
+//Now it's disabled 
 @Component
-public class NoOpActiveCardChecker implements ActiveCardChecker {
+public class NoOpActiveCardChecker implements ActiveAccountChecker {
 
     @Override
-    public boolean hasActiveCard(UUID customerId, UUID cardProductId) {
-        // Card module not built yet — no active cards can exist
+    public boolean hasActiveAccount(UUID customerId, Long creditProductId) {
+        // Account module not built yet — no active cards can exist
         return false;
     }
 }

@@ -50,9 +50,9 @@ class CustomerAddressControllerTest {
     @MockBean
     private CustomerAddressService service;
 
-    // =========================
+
     // ADD ADDRESS TESTS
-    // =========================
+
     @Nested
     @DisplayName("Add Address API Tests")
     class AddAddressTests {
@@ -131,9 +131,8 @@ class CustomerAddressControllerTest {
         }
     }
 
-    // =========================
+
     // GET ADDRESSES TESTS
-    // =========================
     @Nested
     @DisplayName("Get Addresses API Tests")
     class GetAddressesTests {
@@ -171,9 +170,8 @@ class CustomerAddressControllerTest {
         }
     }
 
-    // =========================
+
     // DELETE ADDRESS TESTS
-    // =========================
     @Nested
     @DisplayName("Delete Address API Tests")
     class DeleteAddressTests {

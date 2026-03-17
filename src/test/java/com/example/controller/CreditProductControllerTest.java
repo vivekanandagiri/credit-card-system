@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.example.dto.request.CreditProductCreateRequest;
 import com.example.dto.request.CreditProductUpdateRequest;
 import com.example.dto.response.ApiResponse;
+import com.example.dto.response.CreditProductCreateResponse;
 import com.example.dto.response.CreditProductResponse;
 import com.example.enums.ProductStatus;
 import com.example.exception.ResourceNotFoundException;
@@ -72,29 +73,39 @@ class CreditProductControllerTest {
 
         return response;
     }
+    
+    
 
     // CREATE TESTS
     @Nested
     @DisplayName("Create Credit Product Tests")
     class CreateTests {
+    	
+    	
 
         @Test
         void create_success() throws Exception {
 
-            CreditProductCreateRequest request = new CreditProductCreateRequest();
-            request.setProductName("Gold Credit Card");
-            request.setMinCreditLimit(new BigDecimal("50000"));
-            request.setMaxCreditLimit(new BigDecimal("500000"));
-            request.setEffectiveFrom(LocalDate.now());
+        	CreditProductCreateRequest request = new CreditProductCreateRequest();
+        	request.setProductName("Gold Credit Card");
+        	request.setMinCreditLimit(new BigDecimal("50000"));
+        	request.setMaxCreditLimit(new BigDecimal("500000"));
+        	request.setEffectiveFrom(LocalDate.now());
 
-            CreditProductResponse product = buildResponse();
+        	CreditProductCreateResponse product =
+        	        new CreditProductCreateResponse(
+        	                1L,
+        	                "GOLD-CREDIT-CARD-001",
+        	                "Gold Credit Card",
+        	                ProductStatus.ACTIVE
+        	        );
 
-            ApiResponse<CreditProductResponse> apiResponse =
-                    new ApiResponse<>(FIXED_TIME, 201,
-                            "Credit Product Created Successfully", product);
+        	ApiResponse<CreditProductCreateResponse> apiResponse =
+        	        new ApiResponse<>(FIXED_TIME, 201,
+        	                "Credit Product Created Successfully", product);
 
-            when(creditProductService.create(any()))
-                    .thenReturn(apiResponse);
+        	when(creditProductService.create(any()))
+        	        .thenReturn(apiResponse);
 
             mockMvc.perform(post("/credit-products")
                             .contentType(MediaType.APPLICATION_JSON)

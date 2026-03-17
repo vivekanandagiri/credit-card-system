@@ -1,5 +1,6 @@
 package com.example.enums;
 
+
 public enum EmploymentType {
     SALARIED,
     SELF_EMPLOYED,

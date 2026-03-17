@@ -1,7 +1,8 @@
 package com.example.underwriting.model;
 
 import com.example.entity.CreditCardApplication;
-import com.example.entity.CreditCardProduct;
+import com.example.entity.CreditProduct;
+
 import lombok.Getter;
 import lombok.Setter;
 
@@ -31,8 +32,8 @@ import java.math.RoundingMode;
 public class ApplicationContext {
 
     private CreditCardApplication application;
-    private CreditCardProduct cardProduct;
-
+    private CreditProduct creditProduct;
+    
     // Derived fields
     private BigDecimal annualIncome;
     private BigDecimal debtBurdenRatio;
@@ -40,35 +41,35 @@ public class ApplicationContext {
 
     public static ApplicationContext from(CreditCardApplication application) {
 
-        ApplicationContext ctx = new ApplicationContext();
-        ctx.setApplication(application);
-        ctx.setCardProduct(application.getCardProduct());
+        ApplicationContext context = new ApplicationContext();
+        context.setApplication(application);
+        context.setCreditProduct(application.getCreditProduct());
 
         BigDecimal monthlyIncome  = application.getMonthlyIncome();
         BigDecimal liabilities    = application.getExistingLiabilities();
         BigDecimal requestedLimit = application.getRequestedCreditLimit();
 
         // annual_income = monthly_income * 12
-        ctx.setAnnualIncome(
+        context.setAnnualIncome(
                 monthlyIncome.multiply(BigDecimal.valueOf(12)));
 
         // debt_burden_ratio = existing_liabilities / monthly_income
         if (monthlyIncome.compareTo(BigDecimal.ZERO) > 0) {
-            ctx.setDebtBurdenRatio(
+        	context.setDebtBurdenRatio(
                     liabilities.divide(monthlyIncome, 4, RoundingMode.HALF_UP));
         } else {
-            ctx.setDebtBurdenRatio(BigDecimal.ZERO);
+        	context.setDebtBurdenRatio(BigDecimal.ZERO);
         }
 
         // limit_to_income_ratio = requested_limit / annual_income
-        if (ctx.getAnnualIncome().compareTo(BigDecimal.ZERO) > 0) {
-            ctx.setLimitToIncomeRatio(
-                    requestedLimit.divide(ctx.getAnnualIncome(), 4, RoundingMode.HALF_UP));
+        if (context.getAnnualIncome().compareTo(BigDecimal.ZERO) > 0) {
+        	context.setLimitToIncomeRatio(
+                    requestedLimit.divide(context.getAnnualIncome(), 4, RoundingMode.HALF_UP));
         } else {
-            ctx.setLimitToIncomeRatio(BigDecimal.ZERO);
+        	context.setLimitToIncomeRatio(BigDecimal.ZERO);
         }
 
-        return ctx;
+        return context;
     }
 
     /**

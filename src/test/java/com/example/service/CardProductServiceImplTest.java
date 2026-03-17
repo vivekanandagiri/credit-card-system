@@ -11,6 +11,7 @@ import java.util.UUID;
 import com.example.dto.request.CardProductCreateRequest;
 import com.example.dto.request.CardProductUpdateRequest;
 import com.example.dto.response.ApiResponse;
+import com.example.dto.response.CardProductCreateResponse;
 import com.example.dto.response.CardProductResponse;
 import com.example.entity.CreditCardProduct;
 import com.example.entity.CreditProduct;
@@ -52,6 +53,7 @@ class CardProductServiceImplTest {
     private CreditProduct creditProduct;
     private CreditCardProduct cardProduct;
     private CardProductResponse response;
+    private CardProductCreateResponse createResponse;
 
     @BeforeEach
     void setup() {
@@ -87,6 +89,13 @@ class CardProductServiceImplTest {
                 "Premium card",
                 ProductStatus.ACTIVE
         );
+
+        createResponse = new CardProductCreateResponse(
+                cardProductId,
+                "Gold Visa Card",
+                NetworkType.VISA,
+                ProductStatus.ACTIVE
+        );
     }
 
     // CREATE TESTS
@@ -110,10 +119,10 @@ class CardProductServiceImplTest {
             when(cardProductRepository.save(cardProduct))
                     .thenReturn(cardProduct);
 
-            when(mapper.toResponse(cardProduct))
-                    .thenReturn(response);
+            when(mapper.toCreateResponse(cardProduct))
+            .thenReturn(createResponse);
 
-            ApiResponse<CardProductResponse> result = service.create(request);
+            ApiResponse<CardProductCreateResponse> result = service.create(request);
 
             assertEquals(201, result.getStatus());
             assertEquals("Card product created successfully", result.getMessage());
@@ -392,10 +401,10 @@ class CardProductServiceImplTest {
         }
     }
 
-    // DEACTIVATE TESTS
+ // UPDATE STATUS TESTS
     @Nested
-    @DisplayName("Deactivate Card Product Tests")
-    class DeactivateTests {
+    @DisplayName("Update Card Product Status Tests")
+    class UpdateStatusTests {
 
         @Test
         void deactivate_success() {
@@ -404,7 +413,7 @@ class CardProductServiceImplTest {
                     .thenReturn(Optional.of(cardProduct));
 
             ApiResponse<String> result =
-                    service.deactivate(cardProductId);
+                    service.updateStatus(cardProductId, ProductStatus.INACTIVE);
 
             assertEquals(200, result.getStatus());
 
@@ -420,17 +429,33 @@ class CardProductServiceImplTest {
                     .thenReturn(Optional.of(cardProduct));
 
             assertThrows(BadRequestException.class,
-                    () -> service.deactivate(cardProductId));
+                    () -> service.updateStatus(cardProductId, ProductStatus.INACTIVE));
         }
-        
+
         @Test
-        void deactivate_product_not_found() {
+        void updateStatus_product_not_found() {
 
             when(cardProductRepository.findById(cardProductId))
                     .thenReturn(Optional.empty());
 
             assertThrows(ResourceNotFoundException.class,
-                    () -> service.deactivate(cardProductId));
+                    () -> service.updateStatus(cardProductId, ProductStatus.INACTIVE));
+        }
+        
+        @Test
+        void activate_success() {
+
+            cardProduct.setStatus(ProductStatus.INACTIVE);
+
+            when(cardProductRepository.findById(cardProductId))
+                    .thenReturn(Optional.of(cardProduct));
+
+            ApiResponse<String> result =
+                    service.updateStatus(cardProductId, ProductStatus.ACTIVE);
+
+            assertEquals(200, result.getStatus());
+
+            verify(cardProductRepository).save(cardProduct);
         }
     }
 }

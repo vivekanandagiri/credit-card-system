@@ -11,8 +11,10 @@ import org.springframework.web.bind.annotation.RestController;
 import com.example.api.CardProductApi;
 import com.example.dto.request.CardProductCreateRequest;
 import com.example.dto.request.CardProductUpdateRequest;
+import com.example.dto.response.CardProductCreateResponse;
 import com.example.dto.response.ApiResponse;
 import com.example.dto.response.CardProductResponse;
+import com.example.enums.ProductStatus;
 import com.example.service.CardProductService;
 
 @RestController
@@ -26,10 +28,10 @@ public class CardProductController implements CardProductApi {
 
     @Override
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<CardProductResponse>> create(
+    public ResponseEntity<ApiResponse<CardProductCreateResponse>> create(
             CardProductCreateRequest request) {
 
-        ApiResponse<CardProductResponse> response =
+        ApiResponse<CardProductCreateResponse> response =
                 cardProductService.create(request);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -72,7 +74,10 @@ public class CardProductController implements CardProductApi {
 
     @Override
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<String>> deactivate(UUID id) {
-        return ResponseEntity.ok(cardProductService.deactivate(id));
+    public ResponseEntity<ApiResponse<String>> updateStatus(
+            UUID id,
+            ProductStatus status) {
+
+        return ResponseEntity.ok(cardProductService.updateStatus(id, status));
     }
 }

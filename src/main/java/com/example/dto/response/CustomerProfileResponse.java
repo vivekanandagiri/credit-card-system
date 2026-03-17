@@ -38,7 +38,7 @@ public class CustomerProfileResponse {
 
     @Schema(
             description = "Registered email address",
-            example = "john.doe@example.com"
+            example = "amit@example.com"
     )
     private String email;
 

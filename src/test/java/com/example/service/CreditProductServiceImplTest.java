@@ -28,6 +28,7 @@ import org.mockito.MockitoAnnotations;
 import com.example.dto.request.CreditProductCreateRequest;
 import com.example.dto.request.CreditProductUpdateRequest;
 import com.example.dto.response.ApiResponse;
+import com.example.dto.response.CreditProductCreateResponse;
 import com.example.dto.response.CreditProductResponse;
 import com.example.entity.CreditProduct;
 import com.example.enums.ProductStatus;
@@ -54,21 +55,29 @@ public class CreditProductServiceImplTest {
 	
 	private CreditProduct product;
 	private CreditProductResponse response;
+	private CreditProductCreateResponse createResponse;
 	
 	
 	@BeforeEach
 	void setUp() {
-		MockitoAnnotations.openMocks(this);
-		
-		product = new CreditProduct();
-        product.setCreditProductId(1L);
-        product.setProductName("Gold Credit Card");
-        product.setProductCode("GOLD-CREDIT-CARD-001");
-        product.setStatus(ProductStatus.ACTIVE);
+	    MockitoAnnotations.openMocks(this);
 
-        response = new CreditProductResponse();
-        response.setCreditProductId(1L);
-        response.setProductName("Gold Credit Card");	
+	    product = new CreditProduct();
+	    product.setCreditProductId(1L);
+	    product.setProductName("Gold Credit Card");
+	    product.setProductCode("GOLD-CREDIT-CARD-001");
+	    product.setStatus(ProductStatus.ACTIVE);
+
+	    response = new CreditProductResponse();
+	    response.setCreditProductId(1L);
+	    response.setProductName("Gold Credit Card");
+
+	    createResponse = new CreditProductCreateResponse(
+	            1L,
+	            "GOLD-CREDIT-CARD-001",
+	            "Gold Credit Card",
+	            ProductStatus.ACTIVE
+	    );
 	}
 
 	
@@ -78,8 +87,10 @@ public class CreditProductServiceImplTest {
 	@DisplayName("Create Credit Product Tests")
 	class CreateTests{
 		
+		
 		@Test
 		void create_success() {
+			
 			CreditProductCreateRequest request = new CreditProductCreateRequest();
 			request.setProductName("Gold Credit Card");
 			request.setMinCreditLimit(new BigDecimal("50000"));
@@ -87,20 +98,20 @@ public class CreditProductServiceImplTest {
 			request.setEffectiveFrom(LocalDate.now());
 			
 			when(mapper.toEntity(request)).thenReturn(product);
-            when(codeGenerator.generateBaseCode("Gold Credit Card"))
-                    .thenReturn("GOLD-CREDIT-CARD");
-            when(repository.existsByProductCode(any())).thenReturn(false);
-            when(repository.save(product)).thenReturn(product);
-            when(mapper.toResponse(product)).thenReturn(response);
+			when(codeGenerator.generateBaseCode("Gold Credit Card"))
+			        .thenReturn("GOLD-CREDIT-CARD");
+			when(repository.existsByProductCode(any())).thenReturn(false);
+			when(repository.save(product)).thenReturn(product);
+			when(mapper.toCreateResponse(product)).thenReturn(createResponse);
 
-            ApiResponse<CreditProductResponse> result = service.create(request);
+			ApiResponse<CreditProductCreateResponse> result = service.create(request);
 
-            assertNotNull(result);
-            assertEquals(201, result.getStatus());
-            assertEquals("Credit Product Created Successfully", result.getMessage());
-            assertEquals("Gold Credit Card", result.getData().getProductName());
+			assertNotNull(result);
+			assertEquals(201, result.getStatus());
+			assertEquals("Credit Product Created Successfully", result.getMessage());
+			assertEquals("Gold Credit Card", result.getData().getProductName());
 
-            verify(repository).save(product);
+			verify(repository).save(product);
 			
 			
 		}
@@ -128,9 +139,9 @@ public class CreditProductServiceImplTest {
 		            .thenReturn(false);
 
 		    when(repository.save(any())).thenReturn(product);
-		    when(mapper.toResponse(product)).thenReturn(response);
+		    when(mapper.toCreateResponse(product)).thenReturn(createResponse);
 
-		    ApiResponse<CreditProductResponse> result = service.create(request);
+		    ApiResponse<CreditProductCreateResponse> result = service.create(request);
 
 		    assertEquals(201, result.getStatus());
 
@@ -213,18 +224,18 @@ public class CreditProductServiceImplTest {
 		    when(codeGenerator.generateBaseCode(any())).thenReturn("GOLD-CREDIT-CARD");
 		    when(repository.existsByProductCode(any())).thenReturn(false);
 		    when(repository.save(any())).thenReturn(product);
-		    when(mapper.toResponse(any())).thenReturn(response);
+		    when(mapper.toCreateResponse(any())).thenReturn(createResponse);
 
 		    ExecutorService executor = Executors.newFixedThreadPool(2);
 
-		    Callable<ApiResponse<CreditProductResponse>> task =
+		    Callable<ApiResponse<CreditProductCreateResponse>> task =
 		            () -> service.create(request);
 
-		    Future<ApiResponse<CreditProductResponse>> f1 = executor.submit(task);
-		    Future<ApiResponse<CreditProductResponse>> f2 = executor.submit(task);
+		    Future<ApiResponse<CreditProductCreateResponse>> f1 = executor.submit(task);
+		    Future<ApiResponse<CreditProductCreateResponse>> f2 = executor.submit(task);
 
-		    ApiResponse<CreditProductResponse> r1 = f1.get();
-		    ApiResponse<CreditProductResponse> r2 = f2.get();
+		    ApiResponse<CreditProductCreateResponse> r1 = f1.get();
+		    ApiResponse<CreditProductCreateResponse> r2 = f2.get();
 
 		    assertNotNull(r1);
 		    assertNotNull(r2);

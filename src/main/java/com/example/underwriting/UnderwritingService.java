@@ -48,9 +48,9 @@ public class UnderwritingService {
         this.decisionEngine   = decisionEngine;
     }
 
-    // =====================================================
+
     // MAIN ENTRY POINT
-    // =====================================================
+
     public UnderwritingDecision evaluate(CreditCardApplication application) {
 
         // Step 1 — Build context with all derived fields

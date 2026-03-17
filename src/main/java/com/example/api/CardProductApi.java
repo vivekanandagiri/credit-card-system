@@ -9,7 +9,9 @@ import org.springframework.web.bind.annotation.*;
 import com.example.dto.request.CardProductCreateRequest;
 import com.example.dto.request.CardProductUpdateRequest;
 import com.example.dto.response.ApiResponse;
+import com.example.dto.response.CardProductCreateResponse;
 import com.example.dto.response.CardProductResponse;
+import com.example.enums.ProductStatus;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -23,10 +25,9 @@ import jakarta.validation.Valid;
 @RequestMapping("/api/v1/card-products")
 public interface CardProductApi {
 
-    // =====================================================
     // CREATE PRODUCT
-    // =====================================================
-    @Operation(summary = "Create new card product")
+
+    @Operation(summary = "Create new card product(Admin)")
     @ApiResponses(value = {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "201",
@@ -37,27 +38,21 @@ public interface CardProductApi {
             )
     })
     @PostMapping
-    ResponseEntity<ApiResponse<CardProductResponse>> create(
+    ResponseEntity<ApiResponse<CardProductCreateResponse>> create(
             @Valid @RequestBody CardProductCreateRequest request
     );
 
-    // =====================================================
     // GET ALL
-    // =====================================================
     @Operation(summary = "Get all card products")
     @GetMapping
     ResponseEntity<ApiResponse<List<CardProductResponse>>> getAll();
 
-    // =====================================================
     // GET ALL ACTIVE
-    // =====================================================
     @Operation(summary = "Get all active card products")
     @GetMapping("/active")
     ResponseEntity<ApiResponse<List<CardProductResponse>>> getAllActive();
 
-    // =====================================================
     // GET BY ID
-    // =====================================================
     @Operation(summary = "Get card product by ID")
     @ApiResponses(value = {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -83,22 +78,19 @@ public interface CardProductApi {
             @PathVariable Long creditProductId
     );
 
-    // =====================================================
     // UPDATE
-    // =====================================================
-    @Operation(summary = "Update card product")
+    @Operation(summary = "Update card product(Admin)")
     @PutMapping("/{id}")
     ResponseEntity<ApiResponse<CardProductResponse>> update(
             @PathVariable UUID id,
             @Valid @RequestBody CardProductUpdateRequest request
     );
 
-    // =====================================================
-    // DEACTIVATE
-    // =====================================================
-    @Operation(summary = "Deactivate card product")
-    @PatchMapping("/{id}/deactivate")
-    ResponseEntity<ApiResponse<String>> deactivate(
-            @PathVariable UUID id
+    // Update Status
+    @Operation(summary = "Activate or deactivate card product(Admin)")
+    @PatchMapping("/{id}/status")
+    ResponseEntity<ApiResponse<String>> updateStatus(
+            @PathVariable UUID id,
+            @Valid@RequestParam ProductStatus status
     );
 }

@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import com.example.entity.Customer;
 import com.example.entity.User;
@@ -22,9 +23,24 @@ class JwtUtilTest {
 
         jwtUtil = new JwtUtil();
 
+        // set fields that @Value normally injects
+        ReflectionTestUtils.setField(
+                jwtUtil,
+                "secret",
+                "testsecretkeytestsecretkeytestsecretkey"
+        );
+        ReflectionTestUtils.setField(
+                jwtUtil,
+                "expiration",
+                3600000L
+        );
+
+        // simulate @PostConstruct
+        jwtUtil.init();
         Customer customer = new Customer();
         customer.setCustomerId(UUID.randomUUID());
 
+        
         user = new User();
         user.setUserId(UUID.randomUUID());
         user.setEmail("vivek@gmail.com");

@@ -11,7 +11,6 @@ import java.time.LocalDate;
 @Schema(description = "Request object for creating a credit product")
 public class CreditProductCreateRequest {
 
-
 	@Schema(description = "Product display name", example = "Gold Credit Card", requiredMode = Schema.RequiredMode.REQUIRED)
 	@NotBlank(message = "Product name is required")
 	@Size(max = 100)

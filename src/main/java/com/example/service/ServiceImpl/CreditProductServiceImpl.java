@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import com.example.dto.request.CreditProductCreateRequest;
 import com.example.dto.request.CreditProductUpdateRequest;
 import com.example.dto.response.ApiResponse;
+import com.example.dto.response.CreditProductCreateResponse;
 import com.example.dto.response.CreditProductResponse;
 import com.example.entity.CreditProduct;
 import com.example.enums.ProductStatus;
@@ -40,7 +41,7 @@ public class CreditProductServiceImpl implements CreditProductService {
 
 	// Create Product
 	@Override
-	public ApiResponse<CreditProductResponse> create(CreditProductCreateRequest request) {
+	public ApiResponse<CreditProductCreateResponse> create(CreditProductCreateRequest request) {
 		
 		//Credit Limit Validation check
 		if(request.getMinCreditLimit().compareTo(request.getMaxCreditLimit())>0) {
@@ -65,12 +66,13 @@ public class CreditProductServiceImpl implements CreditProductService {
 		 
 		CreditProduct product = mapper.toEntity(request);
 		// credit product code generation
-				String baseCode = codeGenerator.generateBaseCode(request.getProductName());
+		String baseCode = codeGenerator.generateBaseCode(request.getProductName());
 
-				String finalCode = generateUniqueCode(baseCode);
+		String finalCode = generateUniqueCode(baseCode);
 
-				product.setProductCode(finalCode);
-		CreditProductResponse response = mapper.toResponse(creditProductRepository.save(product));
+		product.setProductCode(finalCode);
+		
+		CreditProductCreateResponse response = mapper.toCreateResponse(creditProductRepository.save(product));
 		
 		return new ApiResponse<>(Instant.now(), HttpStatus.CREATED.value(), "Credit Product Created Successfully",
 				response);
@@ -119,11 +121,6 @@ public class CreditProductServiceImpl implements CreditProductService {
 		return new ApiResponse<>(Instant.now(), HttpStatus.OK.value(), "Credit product updated successfully", response);
 	}
 
-	@Override
-	public ApiResponse<String> deactivate(Long id) {
-		// TODO Auto-generated method stub
-		return null;
-	}
 
 	// Helpers
 	private void applyUpdates(CreditProductUpdateRequest request, CreditProduct product) {
@@ -187,6 +184,33 @@ public class CreditProductServiceImpl implements CreditProductService {
 			}
 
 			return newCode;
+		}
+
+		@Override
+		public ApiResponse<String> updateStatus(Long id, ProductStatus status) {
+			CreditProduct creditProduct = findById(id);
+			
+			// Prevent updating to the same status
+	        if (creditProduct.getStatus() == status) {
+	            throw new BusinessRuleException(
+	                    "Credit product is already " + status.name().toLowerCase());
+	        }
+	        
+	        creditProduct.setStatus(status);
+	        
+	        creditProductRepository.save(creditProduct);
+	        
+	        
+	        String message = status == ProductStatus.ACTIVE
+	                ? "Credit product activated successfully"
+	                : "Credit product deactivated successfully";
+
+	        return new ApiResponse<>(
+	                Instant.now(),
+	                HttpStatus.OK.value(),
+	                message,
+	                status.name()
+	        );
 		}
 
 }

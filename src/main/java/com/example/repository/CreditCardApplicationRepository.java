@@ -15,18 +15,24 @@ public interface CreditCardApplicationRepository
 
     List<CreditCardApplication> findAllByApplicationStatus(ApplicationStatus status);
 
-    boolean existsByCustomerCustomerIdAndCardProductCardProductIdAndApplicationStatusIn(
-            UUID customerId, UUID cardProductId, List<ApplicationStatus> statuses);
-    
-    
-    boolean findTopByCustomerCustomerIdAndCardProductCardProductIdAndApplicationStatusAndSubmittedAtAfter(
+    //active application for same customer + same credit product
+    boolean existsByCustomerCustomerIdAndCreditProductCreditProductIdAndApplicationStatusIn(
             UUID customerId,
-            UUID cardProductId,
+            Long creditProductId,
+            List<ApplicationStatus> statuses
+    );
+    
+    
+    // Rejection cooldown — recent rejection for same customer + same credit product
+    boolean existsByCustomerCustomerIdAndCreditProductCreditProductIdAndApplicationStatusAndSubmittedAtAfter(
+            UUID customerId,
+            Long creditProductId,
             ApplicationStatus status,
             Instant after
     );
 
 
+    // Max active applications limit across all products
     int countByCustomerCustomerIdAndApplicationStatusIn(
             UUID customerId,
             List<ApplicationStatus> statuses

@@ -5,7 +5,7 @@ import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -13,7 +13,7 @@ import com.example.api.KycApi;
 import com.example.dto.request.KycVerifyRequest;
 import com.example.dto.response.ApiResponse;
 import com.example.dto.response.KycResponse;
-
+import com.example.enums.KycStatus;
 import com.example.security.CustomUserPrincipal;
 import com.example.service.KycService;
 
@@ -46,14 +46,14 @@ public class KycController implements KycApi {
 
     @Override
     public ResponseEntity<ApiResponse<KycResponse>> getStatus(
-            CustomUserPrincipal principal) {
+            CustomUserPrincipal principal,KycStatus status) {
 
         ApiResponse<KycResponse> response =
                 kycService.getKycStatus(principal.getCustomerId());
 
         return ResponseEntity.ok(response);
     }
-
+    @PreAuthorize("hasRole('ADMIN')")
     @Override
     public ResponseEntity<ApiResponse<String>> verify(
             UUID kycId,
@@ -69,7 +69,7 @@ public class KycController implements KycApi {
 
         return ResponseEntity.ok(response);
     }
-
+    @PreAuthorize("hasRole('ADMIN')")
     @Override
     public ResponseEntity<ApiResponse<List<KycResponse>>> pending() {
 

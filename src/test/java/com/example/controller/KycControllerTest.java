@@ -72,9 +72,8 @@ class KycControllerTest {
         );
     }
 
-    // =============================
+
     // UPLOAD KYC
-    // =============================
 
     @Test
     void shouldUploadKycSuccessfully() throws Exception {
@@ -106,9 +105,9 @@ class KycControllerTest {
                 .uploadKyc(any(), anyString(), anyString(), any());
     }
 
-    // =============================
+
     // GET KYC STATUS
-    // =============================
+
 
     @Test
     void shouldGetKycStatus() throws Exception {

@@ -48,9 +48,8 @@ public class AuthServiceImpl implements AuthService {
 		this.authMapper = authMapper;
     }
 
-    // =========================================
     // REGISTER
-    // =========================================
+
     @Override
     public ApiResponse<RegisterResponse> register(RegisterRequest request) {
 
@@ -109,9 +108,9 @@ public class AuthServiceImpl implements AuthService {
         );
     }
 
-    // =========================================
+
     // LOGIN
-    // =========================================
+
     @Override
     public ApiResponse<LoginResponse> login(LoginRequest request) {
 

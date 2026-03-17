@@ -3,6 +3,7 @@ package com.example.mapper;
 import org.springframework.stereotype.Component;
 
 import com.example.dto.request.CreditProductCreateRequest;
+import com.example.dto.response.CreditProductCreateResponse;
 import com.example.dto.response.CreditProductResponse;
 import com.example.entity.CreditProduct;
 import com.example.enums.ProductStatus;
@@ -65,5 +66,16 @@ public class CreditProductMapper {
                 product.getStatus()
         );
     }
+	
+	public CreditProductCreateResponse toCreateResponse(CreditProduct product) {
+
+        return new CreditProductCreateResponse(
+                product.getCreditProductId(),
+                product.getProductCode(),
+                product.getProductName(),
+                product.getStatus()
+        );
+    }
+	
 }
 

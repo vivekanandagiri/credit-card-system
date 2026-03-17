@@ -11,7 +11,9 @@ import com.example.api.CreditProductApi;
 import com.example.dto.request.CreditProductCreateRequest;
 import com.example.dto.request.CreditProductUpdateRequest;
 import com.example.dto.response.ApiResponse;
+import com.example.dto.response.CreditProductCreateResponse;
 import com.example.dto.response.CreditProductResponse;
+import com.example.enums.ProductStatus;
 import com.example.service.CreditProductService;
 
 @RestController
@@ -25,10 +27,10 @@ public class CreditProductController implements CreditProductApi {
 
     @Override
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<CreditProductResponse>> create(
+    public ResponseEntity<ApiResponse<CreditProductCreateResponse>> create(
             CreditProductCreateRequest request) {
 
-        ApiResponse<CreditProductResponse> response =
+        ApiResponse<CreditProductCreateResponse> response =
                 creditProductService.create(request);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -63,4 +65,9 @@ public class CreditProductController implements CreditProductApi {
 
         return ResponseEntity.ok(response);
     }
+
+	@Override
+	public ResponseEntity<ApiResponse<String>> updateStatus(Long id, ProductStatus status) {
+		return ResponseEntity.ok(creditProductService.updateStatus(id, status));
+	}
 }

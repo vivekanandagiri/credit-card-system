@@ -1,7 +1,6 @@
 package com.example.api;
 
 import java.util.List;
-
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -9,7 +8,9 @@ import org.springframework.web.bind.annotation.*;
 import com.example.dto.request.CreditProductCreateRequest;
 import com.example.dto.request.CreditProductUpdateRequest;
 import com.example.dto.response.ApiResponse;
+import com.example.dto.response.CreditProductCreateResponse;
 import com.example.dto.response.CreditProductResponse;
+import com.example.enums.ProductStatus;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -20,13 +21,13 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
 @Tag(name = "Credit Products", description = "Admin Credit Product Management APIs")
-@RequestMapping("/credit-products")
+@RequestMapping("/api/v1/credit-products")
 @PreAuthorize("hasRole('ADMIN')")
 public interface CreditProductApi {
 
 
     // CREATE PRODUCT
-    @Operation(summary = "Create new credit product")
+    @Operation(summary = "Create new credit product(Admin)")
     @ApiResponses(value = {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "201",
@@ -45,7 +46,7 @@ public interface CreditProductApi {
             )
     })
     @PostMapping
-    ResponseEntity<ApiResponse<CreditProductResponse>> create(
+    ResponseEntity<ApiResponse<CreditProductCreateResponse>> create(
             @Valid @RequestBody CreditProductCreateRequest request
     );
 
@@ -68,9 +69,7 @@ public interface CreditProductApi {
             @PathVariable Long id
     );
 
-    // =====================================================
     // GET ALL ACTIVE PRODUCTS
-    // =====================================================
     @Operation(summary = "Get all active credit products")
     @ApiResponses(value = {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -81,10 +80,9 @@ public interface CreditProductApi {
     @GetMapping
     ResponseEntity<ApiResponse<List<CreditProductResponse>>> getAll();
 
-    // =====================================================
+
     // UPDATE PRODUCT
-    // =====================================================
-    @Operation(summary = "Update credit product")
+    @Operation(summary = "Update credit product(Admin)")
     @ApiResponses(value = {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "200",
@@ -95,9 +93,20 @@ public interface CreditProductApi {
                     description = "Product not found"
             )
     })
+    
     @PutMapping("/{id}")
     ResponseEntity<ApiResponse<CreditProductResponse>> update(
             @PathVariable Long id,
             @Valid @RequestBody CreditProductUpdateRequest request
     );
+    
+    
+    // Update Status
+    @Operation(summary = "Activate or deactivate credit product(Admin)")
+    @PatchMapping("/{id}/status")
+    ResponseEntity<ApiResponse<String>> updateStatus(
+            @PathVariable Long id,
+            @Valid @RequestParam ProductStatus status
+    );
 }
+

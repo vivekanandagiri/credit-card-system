@@ -2,6 +2,7 @@ package com.example.mapper;
 
 import com.example.dto.request.CardProductCreateRequest;
 import com.example.dto.request.CardProductUpdateRequest;
+import com.example.dto.response.CardProductCreateResponse;
 import com.example.dto.response.CardProductResponse;
 import com.example.entity.CreditCardProduct;
 import com.example.entity.CreditProduct;
@@ -64,6 +65,16 @@ public class CardProductMapper {
                 card.getStatementCycleDay(),
                 card.getForexMarkupPercent(),
                 card.getProductDescription(),
+                card.getStatus()
+        );
+    }
+    //Create Response mapper
+    public CardProductCreateResponse toCreateResponse(CreditCardProduct card) {
+
+        return new CardProductCreateResponse(
+                card.getCardProductId(),
+                card.getProductName(),
+                card.getNetworkType(),
                 card.getStatus()
         );
     }
