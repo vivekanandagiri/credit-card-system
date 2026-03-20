@@ -23,6 +23,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.example.dto.request.CustomerProfileUpdateRequest;
 import com.example.dto.response.ApiResponse;
 import com.example.dto.response.CustomerProfileResponse;
+import com.example.enums.UserRole;
 import com.example.security.CustomUserPrincipal;
 import com.example.security.JwtFilter;
 import com.example.security.JwtUtil;
@@ -75,7 +76,7 @@ class CustomerProfileControllerTest {
         Mockito.when(service.getProfile(Mockito.any())).thenReturn(response);
 
         CustomUserPrincipal principal =
-                new CustomUserPrincipal(userId, null, "test@test.com", "CUSTOMER");
+                new CustomUserPrincipal(userId, null, "test@test.com", UserRole.CUSTOMER);
 
         mockMvc.perform(get("/api/v1/customers/profile")
                         .requestAttr("principal", principal))
@@ -103,7 +104,7 @@ class CustomerProfileControllerTest {
                 .thenReturn(response);
 
         CustomUserPrincipal principal =
-                new CustomUserPrincipal(userId, null, "test@test.com", "CUSTOMER");
+                new CustomUserPrincipal(userId, null, "test@test.com", UserRole.CUSTOMER);
 
         mockMvc.perform(put("/api/v1/customers/profile")
                         .contentType(MediaType.APPLICATION_JSON)

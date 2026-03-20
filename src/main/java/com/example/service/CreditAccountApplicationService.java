@@ -8,7 +8,7 @@ import com.example.dto.response.CreditCardApplicationResponse;
 import java.util.List;
 import java.util.UUID;
 
-public interface CreditCardApplicationService {
+public interface CreditAccountApplicationService {
 
     // Customer — view available card products before applying
 	// ApiResponse<List<CreditProductResponse>> getAvailableCreditProducts();

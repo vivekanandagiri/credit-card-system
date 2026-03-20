@@ -19,8 +19,11 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -48,13 +51,37 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleMalformed(
             HttpMessageNotReadableException ex,
             HttpServletRequest request) {
-    	
-    	String message = "Malformed JSON request";
 
-        if (ex.getMostSpecificCause() != null) {
-            message = ex.getMostSpecificCause().getMessage();
+        String message = "Malformed JSON request";
+
+        Throwable cause = ex.getMostSpecificCause();
+
+        if (cause != null) {
+
+
+            if (cause instanceof com.fasterxml.jackson.databind.exc.InvalidFormatException ife) {
+
+                Class<?> targetType = ife.getTargetType();
+
+                if (targetType != null && targetType.isEnum()) {
+
+                    Object[] enumConstants = targetType.getEnumConstants();
+
+                    String allowedValues = Arrays.stream(enumConstants)
+                            .map(Object::toString)
+                            .collect(Collectors.joining(", "));
+
+                    String fieldName = ife.getPath().stream()
+                            .map(ref -> ref.getFieldName())
+                            .filter(Objects::nonNull)
+                            .findFirst()
+                            .orElse("field");
+
+                    message = "Invalid value for '" + fieldName +
+                            "'. Allowed values: " + allowedValues;
+                }
+            }
         }
-
 
         log.warn("Malformed JSON: {}", ex.getMessage());
 
@@ -115,6 +142,21 @@ public class GlobalExceptionHandler {
         log.warn("Illegal argument: {}", ex.getMessage());
 
         return ResponseEntity.badRequest()
+                .body(build(
+                        HttpStatus.BAD_REQUEST,
+                        ex.getMessage(),
+                        request
+                ));
+    }
+    
+    @ExceptionHandler(BadRequestException.class)
+    public ResponseEntity<ErrorResponse> handleBadRequest(
+            BadRequestException ex,
+            HttpServletRequest request) {
+
+        log.warn("Bad request: {}", ex.getMessage());
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(build(
                         HttpStatus.BAD_REQUEST,
                         ex.getMessage(),

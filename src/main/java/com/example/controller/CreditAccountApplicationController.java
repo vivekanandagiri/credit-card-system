@@ -8,7 +8,7 @@ import com.example.dto.response.CreditCardApplicationCreateResponse;
 import com.example.dto.response.CreditCardApplicationResponse;
 import com.example.enums.ApplicationStatus;
 import com.example.security.CustomUserPrincipal;
-import com.example.service.CreditCardApplicationService;
+import com.example.service.CreditAccountApplicationService;
 
 import jakarta.validation.Valid;
 
@@ -21,11 +21,11 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-public class CreditCardApplicationController implements CreditCardApplicationApi {
+public class CreditAccountApplicationController implements CreditCardApplicationApi {
 
-    private final CreditCardApplicationService service;
+    private final CreditAccountApplicationService service;
 
-    public CreditCardApplicationController(CreditCardApplicationService service) {
+    public CreditAccountApplicationController(CreditAccountApplicationService service) {
         this.service = service;
     }
 

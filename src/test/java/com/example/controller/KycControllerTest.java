@@ -4,6 +4,7 @@ import com.example.dto.request.KycVerifyRequest;
 import com.example.dto.response.ApiResponse;
 import com.example.dto.response.KycResponse;
 import com.example.enums.KycStatus;
+import com.example.enums.UserRole;
 import com.example.security.CustomUserPrincipal;
 import com.example.security.JwtFilter;
 import com.example.security.JwtUtil;
@@ -68,7 +69,7 @@ class KycControllerTest {
                 userId,
                 customerId,
                 "test@example.com",
-                "CUSTOMER"
+                UserRole.CUSTOMER
         );
     }
 

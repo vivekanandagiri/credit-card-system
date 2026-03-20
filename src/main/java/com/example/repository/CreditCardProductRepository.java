@@ -17,5 +17,10 @@ public interface CreditCardProductRepository extends JpaRepository<CreditCardPro
             String productName,
             Long creditProductId
     );
+    
+    List<CreditCardProduct> findAllByCreditProductCreditProductIdAndStatus(
+            Long creditProductId,
+            ProductStatus status
+    );
 
 }

@@ -7,7 +7,7 @@ import com.example.enums.DecisionType;
 import org.springframework.stereotype.Component;
 
 @Component
-public class CreditCardApplicationMapper {
+public class CreditAccountApplicationMapper {
 
     // ENTITY → RESPONSE
     public CreditCardApplicationResponse toResponse(CreditCardApplication app) {

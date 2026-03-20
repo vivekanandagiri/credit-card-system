@@ -10,16 +10,17 @@ import com.example.entity.CreditProduct;
 import com.example.entity.Customer;
 import com.example.entity.User;
 import com.example.enums.*;
+import com.example.exception.BadRequestException;
 import com.example.exception.BusinessRuleException;
 import com.example.exception.ConflictException;
 import com.example.exception.ProfileNotCreatedException;
 import com.example.exception.ResourceNotFoundException;
 import com.example.exception.UserNotFoundException;
-import com.example.mapper.CreditCardApplicationMapper;
+import com.example.mapper.CreditAccountApplicationMapper;
 import com.example.repository.*;
 import com.example.service.ActiveAccountChecker;
 import com.example.service.CreditAccountService;
-import com.example.service.CreditCardApplicationService;
+import com.example.service.CreditAccountApplicationService;
 import com.example.underwriting.UnderwritingService;
 import com.example.underwriting.model.UnderwritingDecision;
 import org.springframework.http.HttpStatus;
@@ -35,7 +36,7 @@ import java.util.stream.Collectors;
 
 @Service
 @Transactional
-public class CreditCardApplicationServiceImpl implements CreditCardApplicationService {
+public class CreditAccountApplicationServiceImpl implements CreditAccountApplicationService {
 
 	
 	// Maximum active applications a customer can have at any time
@@ -48,15 +49,15 @@ public class CreditCardApplicationServiceImpl implements CreditCardApplicationSe
 	private final CreditProductRepository creditProductRepository;
 	private final KycRepository kycRepository;
 	private final UserRepository userRepository;
-	private final CreditCardApplicationMapper applicationMapper;
+	private final CreditAccountApplicationMapper applicationMapper;
 	private final UnderwritingService underwritingService;
 	private final ActiveAccountChecker activeAccountChecker;
 	private final CreditAccountService creditAccountService;
 	private final CreditAccountRepository creditAccountRepository;
 
-	public CreditCardApplicationServiceImpl(CreditCardApplicationRepository applicationRepository,
+	public CreditAccountApplicationServiceImpl(CreditCardApplicationRepository applicationRepository,
 			CreditProductRepository creditProductRepository, KycRepository kycRepository,
-			UserRepository userRepository, CreditCardApplicationMapper applicationMapper,
+			UserRepository userRepository, CreditAccountApplicationMapper applicationMapper,
 			 UnderwritingService underwritingService, ActiveAccountChecker activeAccountChecker, CreditAccountService creditAccountService, CreditAccountRepository creditAccountRepository) {
 
 		this.applicationRepository = applicationRepository;
@@ -116,7 +117,7 @@ public class CreditCardApplicationServiceImpl implements CreditCardApplicationSe
 		CreditProduct creditProduct = creditProductRepository
 	                .findById(request.getCreditProductId())
 	                .orElseThrow(() ->
-	                        new RuntimeException("Credit product with id "
+	                        new ResourceNotFoundException("Credit product with id "
 	                                + request.getCreditProductId() + " not found"));
 
 		if (creditProduct.getStatus() == ProductStatus.INACTIVE) {
@@ -170,10 +171,16 @@ public class CreditCardApplicationServiceImpl implements CreditCardApplicationSe
 		if (activeAccountChecker.hasActiveAccount(
                 customer.getCustomerId(),
                 creditProduct.getCreditProductId())) {
-            throw new RuntimeException(
+            throw new BusinessRuleException(
                     "You already have an active credit account for this product. "
                             + "Cannot apply again.");
         }
+		
+		//Employment validation
+		if (request.getEmploymentType() == EmploymentType.SALARIED
+		        && (request.getEmployerName() == null || request.getEmployerName().isBlank())) {
+		    throw new BusinessRuleException("Employer name is required for salaried applicants");
+		}
 		
 
 		// . Build application entity
@@ -278,7 +285,7 @@ public class CreditCardApplicationServiceImpl implements CreditCardApplicationSe
 		try {
 			applicationStatus = ApplicationStatus.valueOf(status.toUpperCase());
 		} catch (IllegalArgumentException e) {
-			throw new RuntimeException("Invalid application status: " + status);
+			throw new BadRequestException("Invalid application status: " + status);
 		}
 
 		List<CreditCardApplicationResponse> list = applicationRepository.findAllByApplicationStatus(applicationStatus)
@@ -294,7 +301,7 @@ public class CreditCardApplicationServiceImpl implements CreditCardApplicationSe
 	public ApiResponse<CreditCardApplicationResponse> decide(UUID applicationId, ApplicationDecisionRequest request) {
 
 	    CreditCardApplication application = applicationRepository.findById(applicationId)
-	            .orElseThrow(() -> new RuntimeException("Application with id " + applicationId + " not found"));
+	            .orElseThrow(() -> new ResourceNotFoundException("Application with id " + applicationId + " not found"));
 
 	    if (application.getApplicationStatus() != ApplicationStatus.PENDING_REVIEW) {
 	        throw new BusinessRuleException("Only PENDING_REVIEW applications can be manually decided");

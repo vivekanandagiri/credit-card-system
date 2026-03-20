@@ -74,7 +74,7 @@ public class JwtFilter extends OncePerRequestFilter {
                 	        user.getUserId(),
                 	        customerId,
                 	        user.getEmail(),
-                	        user.getRole().name()
+                	        user.getRole()
                 	);
 
                     UsernamePasswordAuthenticationToken authentication =
