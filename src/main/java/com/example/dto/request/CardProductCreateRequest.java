@@ -12,11 +12,6 @@ import java.math.BigDecimal;
 @Schema(description = "Request object for creating a card product variant under a credit product")
 public class CardProductCreateRequest {
 
-    @Schema(description = "Associated credit product ID",
-            example = "1",
-            requiredMode = Schema.RequiredMode.REQUIRED)
-    @NotNull(message = "Credit product ID is required")
-    private Long creditProductId;
 
     @Schema(description = "Card product display name",
             example = "Gold Visa Card",

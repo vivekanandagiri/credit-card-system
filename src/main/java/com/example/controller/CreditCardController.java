@@ -7,15 +7,15 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.RestController;
 
+import com.example.api.CreditCardApi;
 import com.example.dto.request.CreditCardIssuanceRequest;
 import com.example.dto.request.CreditCardStatusUpdateRequest;
 import com.example.dto.response.ApiResponse;
 import com.example.dto.response.CardProductResponse;
 import com.example.dto.response.CreditCardIssuanceResponse;
 import com.example.dto.response.CreditCardResponse;
-import com.example.enums.CardStatus;
 import com.example.enums.UserRole;
 import com.example.security.CustomUserPrincipal;
 import com.example.service.CreditCardService;
@@ -23,8 +23,7 @@ import com.example.service.CreditCardService;
 import jakarta.validation.Valid;
 
 @RestController
-@RequestMapping("/api/v1/cards")
-public class CreditCardController {
+public class CreditCardController implements CreditCardApi {
 
     private final CreditCardService cardService;
 
@@ -32,135 +31,149 @@ public class CreditCardController {
         this.cardService = cardService;
     }
 
-    // GET CARDS (Customer → own, Admin → all)
-    @GetMapping
-    @PreAuthorize("hasAnyRole('CUSTOMER','ADMIN')")
-    public ResponseEntity<ApiResponse<List<CreditCardIssuanceResponse>>> getCards(
-            @AuthenticationPrincipal CustomUserPrincipal principal,
-            @RequestParam(required = false) CardStatus status) {
-
-    	if (status != null) {
-            return ResponseEntity.ok(
-                    cardService.getCardsByStatusForUser(principal, status)
-            );
-        }
-
-        if (principal.getRole() == UserRole.ADMIN) {
-            return ResponseEntity.ok(cardService.getAllCards());
-        }
-
-        return ResponseEntity.ok(cardService.getMyCards(principal.getUserId()));
-    }
-
-    // CREATE CARD (Customer / Admin)
-    @PostMapping
+    @Override
     @PreAuthorize("hasAnyRole('CUSTOMER','ADMIN')")
     public ResponseEntity<ApiResponse<CreditCardResponse>> issueCard(
             @AuthenticationPrincipal CustomUserPrincipal principal,
-            @Valid @RequestBody CreditCardIssuanceRequest request) {
+            UUID accountId,
+            @Valid CreditCardIssuanceRequest request) {
 
-        ApiResponse<CreditCardResponse> response;
+    	CreditCardResponse response =
+                (principal.getRole() == UserRole.ADMIN)
+                        ? cardService.issueCardByAdmin(accountId,request)
+                        : cardService.issueCard(principal.getUserId(),accountId, request);
 
-        if (principal.getRole().name().equals("ADMIN")) {
-            response = cardService.issueCardByAdmin(request);
-        } else {
-            response = cardService.issueCard(principal.getUserId(), request);
-        }
-
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    	return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(
+                		HttpStatus.CREATED,
+                		"Card issued successfully",
+                		response));
     }
 
-    // GET CARD BY ID (secured in service)
-    @GetMapping("/{cardId}")
-    @PreAuthorize("hasAnyRole('CUSTOMER','ADMIN')")
-    public ResponseEntity<ApiResponse<CreditCardResponse>> getCardById(
-            @AuthenticationPrincipal CustomUserPrincipal principal,
-            @PathVariable UUID cardId) {
-
-        // Service should internally handle access
-        if (principal.getRole().name().equals("ADMIN")) {
-            return ResponseEntity.ok(cardService.getCardById(cardId));
-        }
-
-        return ResponseEntity.ok(
-                cardService.getMyCardById(principal.getUserId(), cardId));
-    }
-
-    // UPDATE CARD STATUS (Unified)
-    @PatchMapping("/{cardId}")
-    @PreAuthorize("hasAnyRole('CUSTOMER','ADMIN')")
-    public ResponseEntity<ApiResponse<CreditCardIssuanceResponse>> updateCardStatus(
-            @AuthenticationPrincipal CustomUserPrincipal principal,
-            @PathVariable UUID cardId,
-            @Valid @RequestBody CreditCardStatusUpdateRequest request) {
-
-        return ResponseEntity.ok(
-                cardService.updateCardStatusForUser(principal, cardId, request));
-    }
-    
-    @GetMapping("/{accountId}/card-products")
-    @PreAuthorize("hasRole('CUSTOMER')")
-    public ResponseEntity<ApiResponse<List<CardProductResponse>>> getCardProducts(
-            @AuthenticationPrincipal CustomUserPrincipal principal,
-            @PathVariable UUID accountId) {
-
-        return ResponseEntity.ok(
-                cardService.getAvailableCardProducts(principal.getUserId(), accountId)
-        );
-    }
-    
-    @GetMapping("/{accountId}/cards")
-    @PreAuthorize("hasAnyRole('CUSTOMER','ADMIN')")
+    @Override
     public ResponseEntity<ApiResponse<List<CreditCardResponse>>> getCardsByAccount(
             @AuthenticationPrincipal CustomUserPrincipal principal,
-            @PathVariable UUID accountId) {
+            UUID accountId) {
 
-        // ADMIN → can access any account
-        if (principal.getRole() == UserRole.ADMIN) {
-            return ResponseEntity.ok(
-                    cardService.getCardsByAccount(accountId) // ❌ MISSING
-            );
-        }
+        List<CreditCardResponse> result =
+                (principal.getRole() == UserRole.ADMIN)
+                        ? cardService.getCardsByAccount(accountId)
+                        : cardService.getCardsByAccount(principal.getUserId(), accountId);
 
-        // CUSTOMER → only own account
         return ResponseEntity.ok(
-                cardService.getMyCardsByAccount(principal.getUserId(), accountId)
+                ApiResponse.success(
+                		HttpStatus.OK,
+                		"Cards fetched successfully", 
+                		result)
         );
     }
-    @PostMapping("/{cardId}/activate")
-    @PreAuthorize("hasAnyRole('CUSTOMER','ADMIN')")
-    public ResponseEntity<ApiResponse<CreditCardIssuanceResponse>> activate(
-            @AuthenticationPrincipal CustomUserPrincipal principal,
-            @PathVariable UUID cardId) {
-
-        return ResponseEntity.ok(cardService.activateCard(principal, cardId));
-    }
     
-    @PostMapping("/{cardId}/block")
-    @PreAuthorize("hasAnyRole('CUSTOMER','ADMIN')")
-    public ResponseEntity<ApiResponse<CreditCardIssuanceResponse>> block(
+    @Override
+    public ResponseEntity<ApiResponse<CreditCardResponse>> getCardById(
             @AuthenticationPrincipal CustomUserPrincipal principal,
-            @PathVariable UUID cardId,
-            @RequestParam(required = false) String reason) {
+            UUID accountId,
+            UUID cardId) {
 
-        return ResponseEntity.ok(cardService.blockCard(principal, cardId, reason));
+        CreditCardResponse result =
+                (principal.getRole() == UserRole.ADMIN)
+                        ? cardService.getCardById(cardId)
+                        : cardService.getCardById(principal.getUserId(), accountId, cardId);
+
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                		HttpStatus.OK,
+                		"Card fetched successfully",
+                		result)
+        );
     }
-    @PostMapping("/{cardId}/unblock")
-    @PreAuthorize("hasAnyRole('CUSTOMER','ADMIN')")
-    public ResponseEntity<ApiResponse<CreditCardIssuanceResponse>> unblock(
+
+    @Override
+    public ResponseEntity<ApiResponse<CreditCardIssuanceResponse>> updateCardStatus(
             @AuthenticationPrincipal CustomUserPrincipal principal,
-            @PathVariable UUID cardId) {
+            UUID accountId,
+            UUID cardId,
+            @Valid CreditCardStatusUpdateRequest request) {
 
-        return ResponseEntity.ok(cardService.unblockCard(principal, cardId));
+        CreditCardIssuanceResponse result =
+                cardService.updateCardStatusForUser(principal, accountId, cardId, request);
+
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                		HttpStatus.OK,
+                		"Card status updated successfully",
+                		result)
+        );
     }
+
+    @Override
+    public ResponseEntity<ApiResponse<List<CardProductResponse>>> getCardProducts(
+            @AuthenticationPrincipal CustomUserPrincipal principal,
+            UUID accountId) {
+
+        List<CardProductResponse> result =
+                cardService.getAvailableCardProducts(principal.getUserId(), accountId);
+
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                		HttpStatus.OK,
+                		"Card products fetched successfully", result)
+        );
+    }
+
+//    @Override
+//    @PreAuthorize("hasRole('ADMIN')")
+//    public ResponseEntity<ApiResponse<List<CreditCardIssuanceResponse>>> getAllCards(
+//            @AuthenticationPrincipal CustomUserPrincipal principal,
+//            CardStatus status) {
+//
+//        if (status != null) {
+//            return ResponseEntity.ok(cardService.getCardsByStatus(status));
+//        }
+//
+//        return ResponseEntity.ok(cardService.getAllCards());
+//    }
+
     
-    @PostMapping("/{cardId}/cancel")
-    @PreAuthorize("hasAnyRole('CUSTOMER','ADMIN')")
-    public ResponseEntity<ApiResponse<CreditCardIssuanceResponse>> cancel(
-            @AuthenticationPrincipal CustomUserPrincipal principal,
-            @PathVariable UUID cardId,
-            @RequestParam(required = false) String reason) {
 
-        return ResponseEntity.ok(cardService.cancelCard(principal, cardId, reason));
-    }
+//    @Override
+//    @PreAuthorize("hasAnyRole('CUSTOMER','ADMIN')")
+//    public ResponseEntity<ApiResponse<CreditCardIssuanceResponse>> activate(
+//            @AuthenticationPrincipal CustomUserPrincipal principal,
+//            UUID cardId) {
+//
+//        return ResponseEntity.ok(
+//                cardService.activateCard(principal, cardId));
+//    }
+//
+//    @Override
+//    @PreAuthorize("hasAnyRole('CUSTOMER','ADMIN')")
+//    public ResponseEntity<ApiResponse<CreditCardIssuanceResponse>> block(
+//            @AuthenticationPrincipal CustomUserPrincipal principal,
+//            UUID cardId,
+//            String reason) {
+//
+//        return ResponseEntity.ok(
+//                cardService.blockCard(principal, cardId, reason));
+//    }
+//
+//    @Override
+//    @PreAuthorize("hasAnyRole('CUSTOMER','ADMIN')")
+//    public ResponseEntity<ApiResponse<CreditCardIssuanceResponse>> unblock(
+//            @AuthenticationPrincipal CustomUserPrincipal principal,
+//            UUID cardId) {
+//
+//        return ResponseEntity.ok(
+//                cardService.unblockCard(principal, cardId));
+//    }
+//
+//    @Override
+//    @PreAuthorize("hasAnyRole('CUSTOMER','ADMIN')")
+//    public ResponseEntity<ApiResponse<CreditCardIssuanceResponse>> cancel(
+//            @AuthenticationPrincipal CustomUserPrincipal principal,
+//            UUID cardId,
+//            String reason) {
+//
+//        return ResponseEntity.ok(
+//                cardService.cancelCard(principal, cardId, reason));
+//    }
 }

@@ -4,9 +4,10 @@ import com.example.api.CreditCardApplicationApi;
 import com.example.dto.request.ApplicationDecisionRequest;
 import com.example.dto.request.CreditCardApplicationRequest;
 import com.example.dto.response.ApiResponse;
-import com.example.dto.response.CreditCardApplicationCreateResponse;
 import com.example.dto.response.CreditCardApplicationResponse;
+import com.example.dto.response.CreditCardApplicationSummaryResponse;
 import com.example.enums.ApplicationStatus;
+import com.example.enums.UserRole;
 import com.example.security.CustomUserPrincipal;
 import com.example.service.CreditAccountApplicationService;
 
@@ -29,38 +30,40 @@ public class CreditAccountApplicationController implements CreditCardApplication
         this.service = service;
     }
 
-//    @Override
-//    public ResponseEntity<ApiResponse<List<CardProductResponse>>> getAvailableCardProducts() {
-//        return ResponseEntity.ok(service.getAvailableCardProducts());
-//    }
 
     @Override
     @PreAuthorize("hasRole('CUSTOMER')")
-    public ResponseEntity<ApiResponse<CreditCardApplicationCreateResponse>> apply(
+    public ResponseEntity<ApiResponse<CreditCardApplicationSummaryResponse>> apply(
             CustomUserPrincipal principal,
             @Valid CreditCardApplicationRequest request) {
 
-        ApiResponse<CreditCardApplicationCreateResponse> response =
+    	CreditCardApplicationSummaryResponse response =
                 service.apply(principal.getUserId(), request);
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(HttpStatus.CREATED,"Application submitted successfully", response));
     }
 
     @Override
-    public ResponseEntity<ApiResponse<List<CreditCardApplicationResponse>>> getApplications(
+    public ResponseEntity<ApiResponse<List<CreditCardApplicationSummaryResponse>>> getApplications(
             CustomUserPrincipal principal,
             ApplicationStatus status) {
 
-        if (principal.getRole().equals("ADMIN")) {
+        List<CreditCardApplicationSummaryResponse> responses;
 
-            if (status != null) {
-                return ResponseEntity.ok(service.getApplicationsByStatus(status.name()));
-            }
-
-            return ResponseEntity.ok(service.getAllApplications());
+        if (principal.getRole() == UserRole.ADMIN) {
+        	responses = (status != null)
+                    ? service.getApplicationsByStatus(status.name())
+                    : service.getAllApplications();
+        } else {
+        	responses = (status != null)
+                    ? service.getCustomerApplicationsByStatus(principal.getUserId(), status.name())
+                    : service.getCustomerApplications(principal.getUserId());
         }
 
-        return ResponseEntity.ok(service.getMyApplications(principal.getUserId()));
+        return ResponseEntity.ok(
+                ApiResponse.success(HttpStatus.OK,"Applications fetched successfully", responses)
+        );
     }
 
     @Override
@@ -68,12 +71,20 @@ public class CreditAccountApplicationController implements CreditCardApplication
             CustomUserPrincipal principal,
             UUID applicationId) {
 
-        if (principal.getRole().equals("ADMIN")) {
-            return ResponseEntity.ok(service.getApplicationById(applicationId));
+        CreditCardApplicationResponse response;
+
+        if (principal.getRole() == UserRole.ADMIN) {
+        	response = service.getApplicationById(applicationId);
+        } else {
+        	response = service.getCustomerApplicationById(
+                    principal.getCustomerId(),
+                    applicationId
+            );
         }
 
         return ResponseEntity.ok(
-                service.getMyApplicationById(principal.getUserId(), applicationId));
+                ApiResponse.success(HttpStatus.OK,"Application fetched successfully", response)
+        );
     }
 
     @Override
@@ -82,6 +93,11 @@ public class CreditAccountApplicationController implements CreditCardApplication
             UUID applicationId,
             ApplicationDecisionRequest request) {
 
-        return ResponseEntity.ok(service.decide(applicationId, request));
+        CreditCardApplicationResponse response =
+                service.decide(applicationId, request);
+
+        return ResponseEntity.ok(
+                ApiResponse.success(HttpStatus.OK,"Application decision processed successfully", response)
+        );
     }
 }

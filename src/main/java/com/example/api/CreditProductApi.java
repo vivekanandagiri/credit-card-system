@@ -20,7 +20,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import jakarta.validation.Valid;
 
-@Tag(name = "Credit Products", description = "Admin Credit Product Management APIs")
+@Tag(name = "Credit Products")
 @RequestMapping("/api/v1/credit-products")
 @PreAuthorize("hasRole('ADMIN')")
 public interface CreditProductApi {
@@ -103,7 +103,7 @@ public interface CreditProductApi {
     
     // Update Status
     @Operation(summary = "Activate or deactivate credit product(Admin)")
-    @PatchMapping("/{id}/status")
+    @PatchMapping("/{id}")
     ResponseEntity<ApiResponse<String>> updateStatus(
             @PathVariable Long id,
             @Valid @RequestParam ProductStatus status

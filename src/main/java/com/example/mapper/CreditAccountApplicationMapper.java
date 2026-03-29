@@ -1,7 +1,7 @@
 package com.example.mapper;
 
-import com.example.dto.response.CreditCardApplicationCreateResponse;
 import com.example.dto.response.CreditCardApplicationResponse;
+import com.example.dto.response.CreditCardApplicationSummaryResponse;
 import com.example.entity.CreditCardApplication;
 import com.example.enums.DecisionType;
 import org.springframework.stereotype.Component;
@@ -44,9 +44,9 @@ public class CreditAccountApplicationMapper {
                 app.getDecisionAt()
         );
     }
-    public CreditCardApplicationCreateResponse toCreateResponse(CreditCardApplication app) {
+    public CreditCardApplicationSummaryResponse toSummaryResponse(CreditCardApplication app) {
 
-        return new CreditCardApplicationCreateResponse(
+        return new CreditCardApplicationSummaryResponse(
                 app.getApplicationId(),
                 // Customer info
                 app.getCustomer().getCustomerId(),

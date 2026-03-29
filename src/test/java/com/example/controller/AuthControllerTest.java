@@ -23,7 +23,6 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.example.dto.request.LoginRequest;
 import com.example.dto.request.RegisterRequest;
-import com.example.dto.response.ApiResponse;
 import com.example.dto.response.LoginResponse;
 import com.example.dto.response.RegisterResponse;
 import com.example.dto.response.UserInfo;
@@ -78,19 +77,16 @@ class AuthControllerTest {
             UUID userId = UUID.randomUUID();
 
             RegisterResponse registerResponse =
-                    new RegisterResponse("User registered successfully", userId);
-
-            ApiResponse<RegisterResponse> apiResponse =
-                    ApiResponse.success(201, "User registered successfully", registerResponse);
+                    new RegisterResponse(userId);
 
             when(authService.register(any(RegisterRequest.class)))
-                    .thenReturn(apiResponse);
+            .thenReturn(registerResponse);
+
 
             mockMvc.perform(post("/api/v1/auth/register")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isCreated())
-                    .andExpect(jsonPath("$.status").value(201))
                     .andExpect(jsonPath("$.message").value("User registered successfully"))
                     .andExpect(jsonPath("$.data.userId").value(userId.toString()))
                     .andExpect(jsonPath("$.timestamp").exists());
@@ -302,17 +298,13 @@ class AuthControllerTest {
             LoginResponse loginResponse =
                     new LoginResponse("jwt-token", "Bearer", 3600, userInfo);
 
-            ApiResponse<LoginResponse> apiResponse =
-                    ApiResponse.success(200, "Login successful", loginResponse);
-
             when(authService.login(any(LoginRequest.class)))
-                    .thenReturn(apiResponse);
+                    .thenReturn(loginResponse);
 
             mockMvc.perform(post("/api/v1/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.status").value(200))
                     .andExpect(jsonPath("$.message").value("Login successful"))
                     .andExpect(jsonPath("$.data.accessToken").value("jwt-token"))
                     .andExpect(jsonPath("$.data.tokenType").value("Bearer"))

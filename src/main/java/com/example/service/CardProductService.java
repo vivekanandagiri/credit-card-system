@@ -5,24 +5,34 @@ import java.util.UUID;
 
 import com.example.dto.request.CardProductCreateRequest;
 import com.example.dto.request.CardProductUpdateRequest;
-import com.example.dto.response.ApiResponse;
 import com.example.dto.response.CardProductCreateResponse;
 import com.example.dto.response.CardProductResponse;
+import com.example.entity.CreditCardProduct;
 import com.example.enums.ProductStatus;
 
+/**
+ * Service interface for credit card product lifecycle management.
+ */
 public interface CardProductService {
 
-    ApiResponse<CardProductCreateResponse> create(CardProductCreateRequest request);
+	CardProductCreateResponse create(CardProductCreateRequest request);
+    CardProductResponse getById(UUID id);
 
-    ApiResponse<CardProductResponse> getById(UUID id);
+    List<CardProductResponse> getAll(ProductStatus status);
 
-    ApiResponse<List<CardProductResponse>> getAll();
+    List<CardProductResponse> getAllActive();
 
-    ApiResponse<List<CardProductResponse>> getAllActive();
 
-    ApiResponse<List<CardProductResponse>> getByCreditProduct(Long creditProductId);
+    CardProductResponse update(UUID id, CardProductUpdateRequest request);
 
-    ApiResponse<CardProductResponse> update(UUID id, CardProductUpdateRequest request);
-
-    ApiResponse<String> updateStatus(UUID id,ProductStatus status);
+    String updateStatus(UUID id, ProductStatus status);
+    
+    /**
+     * Returns the raw {@link CreditCardProduct} entity for internal service-to-service use.
+     * The product must be ACTIVE.
+     *
+     * @throws ResourceNotFoundException if not found
+     * @throws BusinessRuleException     if the product is INACTIVE
+     */
+    CreditCardProduct getActiveCardProductEntity(UUID cardProductId);
 }

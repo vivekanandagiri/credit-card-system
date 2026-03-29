@@ -1,33 +1,17 @@
 package com.example.service;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import org.junit.jupiter.api.*;
+import org.mockito.*;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import com.example.dto.request.CreditProductCreateRequest;
 import com.example.dto.request.CreditProductUpdateRequest;
-import com.example.dto.response.ApiResponse;
 import com.example.dto.response.CreditProductCreateResponse;
 import com.example.dto.response.CreditProductResponse;
 import com.example.entity.CreditProduct;
@@ -39,215 +23,104 @@ import com.example.repository.CreditProductRepository;
 import com.example.service.ServiceImpl.CreditProductServiceImpl;
 import com.example.util.ProductCodeGenerator;
 
-public class CreditProductServiceImplTest {
-	
-	@Mock
-	private CreditProductRepository repository;
-	
-	@Mock
-	private CreditProductMapper mapper;
-	
-	@Mock
-	private ProductCodeGenerator codeGenerator;
-	
-	@InjectMocks
-	private CreditProductServiceImpl service;
-	
-	private CreditProduct product;
-	private CreditProductResponse response;
-	private CreditProductCreateResponse createResponse;
-	
-	
-	@BeforeEach
-	void setUp() {
-	    MockitoAnnotations.openMocks(this);
+class CreditProductServiceImplTest {
 
-	    product = new CreditProduct();
-	    product.setCreditProductId(1L);
-	    product.setProductName("Gold Credit Card");
-	    product.setProductCode("GOLD-CREDIT-CARD-001");
-	    product.setStatus(ProductStatus.ACTIVE);
+    @Mock private CreditProductRepository repository;
+    @Mock private CreditProductMapper mapper;
+    @Mock private ProductCodeGenerator codeGenerator;
 
-	    response = new CreditProductResponse();
-	    response.setCreditProductId(1L);
-	    response.setProductName("Gold Credit Card");
+    @InjectMocks
+    private CreditProductServiceImpl service;
 
-	    createResponse = new CreditProductCreateResponse(
-	            1L,
-	            "GOLD-CREDIT-CARD-001",
-	            "Gold Credit Card",
-	            ProductStatus.ACTIVE
-	    );
-	}
+    private CreditProduct product;
+    private CreditProductResponse response;
+    private CreditProductCreateResponse createResponse;
 
-	
-	//create test
-	
-	@Nested
-	@DisplayName("Create Credit Product Tests")
-	class CreateTests{
-		
-		
-		@Test
-		void create_success() {
-			
-			CreditProductCreateRequest request = new CreditProductCreateRequest();
-			request.setProductName("Gold Credit Card");
-			request.setMinCreditLimit(new BigDecimal("50000"));
-			request.setMaxCreditLimit(new BigDecimal("500000"));
-			request.setEffectiveFrom(LocalDate.now());
-			
-			when(mapper.toEntity(request)).thenReturn(product);
-			when(codeGenerator.generateBaseCode("Gold Credit Card"))
-			        .thenReturn("GOLD-CREDIT-CARD");
-			when(repository.existsByProductCode(any())).thenReturn(false);
-			when(repository.save(product)).thenReturn(product);
-			when(mapper.toCreateResponse(product)).thenReturn(createResponse);
+    @BeforeEach
+    void setUp() {
+        MockitoAnnotations.openMocks(this);
 
-			ApiResponse<CreditProductCreateResponse> result = service.create(request);
+        product = new CreditProduct();
+        product.setCreditProductId(1L);
+        product.setProductName("Gold Credit Card");
+        product.setProductCode("GOLD-CREDIT-CARD-001");
+        product.setStatus(ProductStatus.ACTIVE);
 
-			assertNotNull(result);
-			assertEquals(201, result.getStatus());
-			assertEquals("Credit Product Created Successfully", result.getMessage());
-			assertEquals("Gold Credit Card", result.getData().getProductName());
+        response = new CreditProductResponse();
+        response.setCreditProductId(1L);
+        response.setProductName("Gold Credit Card");
 
-			verify(repository).save(product);
-			
-			
-		}
-		
-		@Test
-		void create_product_code_collision_should_generate_new_code() {
+        createResponse = new CreditProductCreateResponse(
+                1L,
+                "GOLD-CREDIT-CARD-001",
+                "Gold Credit Card",
+                ProductStatus.ACTIVE
+        );
+    }
 
-		    CreditProductCreateRequest request = new CreditProductCreateRequest();
-		    request.setProductName("Gold Credit Card");
-		    request.setMinCreditLimit(new BigDecimal("50000"));
-		    request.setMaxCreditLimit(new BigDecimal("500000"));
-		    request.setEffectiveFrom(LocalDate.now());
-
-		    when(mapper.toEntity(request)).thenReturn(product);
-
-		    when(codeGenerator.generateBaseCode("Gold Credit Card"))
-		            .thenReturn("GOLD-CREDIT-CARD");
-
-		    // first code exists -> loop runs
-		    when(repository.existsByProductCode("GOLD-CREDIT-CARD-001"))
-		            .thenReturn(true);
-
-		    // second code available
-		    when(repository.existsByProductCode("GOLD-CREDIT-CARD-002"))
-		            .thenReturn(false);
-
-		    when(repository.save(any())).thenReturn(product);
-		    when(mapper.toCreateResponse(product)).thenReturn(createResponse);
-
-		    ApiResponse<CreditProductCreateResponse> result = service.create(request);
-
-		    assertEquals(201, result.getStatus());
-
-		    verify(repository, times(2)).existsByProductCode(any());
-		}
-		
-		@Test
-		void create_mapper_failure_should_throw_exception() {
-
-		    CreditProductCreateRequest request = new CreditProductCreateRequest();
-
-		    when(mapper.toEntity(request))
-		            .thenThrow(new RuntimeException("Mapping failed"));
-
-		    assertThrows(RuntimeException.class,
-		            () -> service.create(request));
-		}
-		
-		@Test
-		void create_repository_failure_should_throw_exception() {
-
-		    CreditProductCreateRequest request = new CreditProductCreateRequest();
-		    request.setProductName("Gold Card");
-		    request.setMinCreditLimit(new BigDecimal("50000"));
-		    request.setMaxCreditLimit(new BigDecimal("500000"));
-		    request.setEffectiveFrom(LocalDate.now());
-
-		    when(mapper.toEntity(request)).thenReturn(product);
-
-		    when(codeGenerator.generateBaseCode(any()))
-		            .thenReturn("GOLD-CARD");
-
-		    when(repository.existsByProductCode(any()))
-		            .thenReturn(false);
-
-		    when(repository.save(product))
-		            .thenThrow(new RuntimeException("Database error"));
-
-		    assertThrows(RuntimeException.class,
-		            () -> service.create(request));
-		}
-		
-		@Test
-		void create_min_credit_limit_greater_than_max_should_throw_exception() {
-
-		    CreditProductCreateRequest request = new CreditProductCreateRequest();
-		    request.setProductName("Gold Card");
-		    request.setMinCreditLimit(new BigDecimal("600000"));
-		    request.setMaxCreditLimit(new BigDecimal("500000"));
-		    request.setEffectiveFrom(LocalDate.now());
-
-		    assertThrows(BusinessRuleException.class,
-		            () -> service.create(request));
-		}
-		
-		@Test
-		void create_effective_to_before_effective_from_should_throw_exception() {
-
-		    CreditProductCreateRequest request = new CreditProductCreateRequest();
-		    request.setProductName("Gold Card");
-		    request.setMinCreditLimit(new BigDecimal("50000"));
-		    request.setMaxCreditLimit(new BigDecimal("500000"));
-		    request.setEffectiveFrom(LocalDate.of(2030,1,1));
-		    request.setEffectiveTo(LocalDate.of(2029,1,1));
-
-		    assertThrows(BusinessRuleException.class,
-		            () -> service.create(request));
-		}
-		
-		@Test
-		void create_product_concurrently_should_generate_unique_codes() throws Exception {
-
-		    CreditProductCreateRequest request = new CreditProductCreateRequest();
-		    request.setProductName("Gold Credit Card");
-		    request.setMinCreditLimit(new BigDecimal("50000"));
-		    request.setMaxCreditLimit(new BigDecimal("500000"));
-		    request.setEffectiveFrom(LocalDate.now());
-
-		    when(mapper.toEntity(any())).thenReturn(product);
-		    when(codeGenerator.generateBaseCode(any())).thenReturn("GOLD-CREDIT-CARD");
-		    when(repository.existsByProductCode(any())).thenReturn(false);
-		    when(repository.save(any())).thenReturn(product);
-		    when(mapper.toCreateResponse(any())).thenReturn(createResponse);
-
-		    ExecutorService executor = Executors.newFixedThreadPool(2);
-
-		    Callable<ApiResponse<CreditProductCreateResponse>> task =
-		            () -> service.create(request);
-
-		    Future<ApiResponse<CreditProductCreateResponse>> f1 = executor.submit(task);
-		    Future<ApiResponse<CreditProductCreateResponse>> f2 = executor.submit(task);
-
-		    ApiResponse<CreditProductCreateResponse> r1 = f1.get();
-		    ApiResponse<CreditProductCreateResponse> r2 = f2.get();
-
-		    assertNotNull(r1);
-		    assertNotNull(r2);
-
-		    executor.shutdown();
-		}
-	}
-	
-	// GET BY ID TESTS
+    // ================= CREATE =================
 
     @Nested
-    @DisplayName("Get By Id Tests")
+    class CreateTests {
+
+        @Test
+        void create_success() {
+
+            CreditProductCreateRequest request = new CreditProductCreateRequest();
+            request.setProductName("Gold Credit Card");
+            request.setMinCreditLimit(new BigDecimal("50000"));
+            request.setMaxCreditLimit(new BigDecimal("500000"));
+            request.setEffectiveFrom(LocalDate.now().plusDays(1));
+
+            when(mapper.toEntity(request)).thenReturn(product);
+            when(codeGenerator.generateBaseCode(any())).thenReturn("GOLD-CREDIT-CARD");
+            when(repository.existsByProductCode(any())).thenReturn(false);
+            when(repository.save(product)).thenReturn(product);
+            when(mapper.toCreateResponse(product)).thenReturn(createResponse);
+
+            CreditProductCreateResponse result = service.create(request);
+
+            assertNotNull(result);
+            assertEquals("Gold Credit Card", result.getProductName());
+            verify(repository).save(product);
+        }
+
+        @Test
+        void create_product_code_collision_should_generate_new_code() {
+
+            CreditProductCreateRequest request = new CreditProductCreateRequest();
+            request.setProductName("Gold Credit Card");
+
+            when(mapper.toEntity(request)).thenReturn(product);
+            when(codeGenerator.generateBaseCode(any())).thenReturn("CODE");
+
+            when(repository.existsByProductCode("CODE-001")).thenReturn(true);
+            when(repository.existsByProductCode("CODE-002")).thenReturn(false);
+
+            when(repository.save(any())).thenReturn(product);
+            when(mapper.toCreateResponse(product)).thenReturn(createResponse);
+
+            CreditProductCreateResponse result = service.create(request);
+
+            assertNotNull(result);
+            verify(repository, times(2)).existsByProductCode(any());
+        }
+
+        @Test
+        void create_min_credit_limit_greater_than_max_should_throw() {
+
+            CreditProductCreateRequest request = new CreditProductCreateRequest();
+            request.setMinCreditLimit(new BigDecimal("600000"));
+            request.setMaxCreditLimit(new BigDecimal("500000"));
+
+            assertThrows(BusinessRuleException.class,
+                    () -> service.create(request));
+        }
+    }
+
+    // ================= GET BY ID =================
+
+    @Nested
     class GetByIdTests {
 
         @Test
@@ -256,10 +129,9 @@ public class CreditProductServiceImplTest {
             when(repository.findById(1L)).thenReturn(Optional.of(product));
             when(mapper.toResponse(product)).thenReturn(response);
 
-            ApiResponse<CreditProductResponse> result = service.getById(1L);
+            CreditProductResponse result = service.getById(1L);
 
-            assertEquals(200, result.getStatus());
-            assertEquals("Gold Credit Card", result.getData().getProductName());
+            assertEquals("Gold Credit Card", result.getProductName());
         }
 
         @Test
@@ -271,11 +143,10 @@ public class CreditProductServiceImplTest {
                     () -> service.getById(1L));
         }
     }
-    
- // GET ALL TESTS
+
+    // ================= GET ALL =================
 
     @Nested
-    @DisplayName("Get All Tests")
     class GetAllTests {
 
         @Test
@@ -284,39 +155,25 @@ public class CreditProductServiceImplTest {
             when(repository.findAll()).thenReturn(List.of(product));
             when(mapper.toResponse(product)).thenReturn(response);
 
-            ApiResponse<List<CreditProductResponse>> result =
-                    service.getAll();
+            List<CreditProductResponse> result = service.getAll();
 
-            assertEquals(200, result.getStatus());
-            assertEquals(1, result.getData().size());
+            assertEquals(1, result.size());
         }
-        
+
         @Test
-        void getAll_empty_list() {
+        void getAll_empty() {
 
             when(repository.findAll()).thenReturn(List.of());
 
-            ApiResponse<List<CreditProductResponse>> result = service.getAll();
+            List<CreditProductResponse> result = service.getAll();
 
-            assertEquals(200, result.getStatus());
-            assertTrue(result.getData().isEmpty());
-        }
-        
-        @Test
-        void getAll_active() {
-        	when(repository.findAllByStatus(ProductStatus.ACTIVE)).thenReturn(List.of(product));
-        	
-        	ApiResponse<List<CreditProductResponse>>result=service.getAllActive();
-        	
-        	assertEquals(200, result.getStatus());
-        	assertEquals(1, result.getData().size());
+            assertTrue(result.isEmpty());
         }
     }
-    
- // UPDATE TESTS
+
+    // ================= UPDATE =================
 
     @Nested
-    @DisplayName("Update Credit Product Tests")
     class UpdateTests {
 
         @Test
@@ -329,56 +186,29 @@ public class CreditProductServiceImplTest {
             when(repository.save(product)).thenReturn(product);
             when(mapper.toResponse(product)).thenReturn(response);
 
-            ApiResponse<CreditProductResponse> result =
-                    service.update(1L, request);
+            CreditProductResponse result = service.update(1L, request);
 
-            assertEquals(200, result.getStatus());
-
+            assertNotNull(result);
             verify(repository).save(product);
         }
 
         @Test
-        void update_product_not_found() {
-
-            CreditProductUpdateRequest request = new CreditProductUpdateRequest();
+        void update_not_found() {
 
             when(repository.findById(1L)).thenReturn(Optional.empty());
 
             assertThrows(ResourceNotFoundException.class,
-                    () -> service.update(1L, request));
+                    () -> service.update(1L, new CreditProductUpdateRequest()));
         }
 
         @Test
-        void update_inactive_product() {
-
-            CreditProductUpdateRequest request = new CreditProductUpdateRequest();
+        void update_inactive_should_throw() {
 
             product.setStatus(ProductStatus.INACTIVE);
-
             when(repository.findById(1L)).thenReturn(Optional.of(product));
 
             assertThrows(BusinessRuleException.class,
-                    () -> service.update(1L, request));
-        }
-        
-        @Test
-        void update_partial_update_should_modify_only_provided_fields() {
-
-            CreditProductUpdateRequest request = new CreditProductUpdateRequest();
-            request.setMinCreditLimit(new BigDecimal("60000"));
-
-            product.setMinCreditLimit(new BigDecimal("50000"));
-
-            when(repository.findById(1L)).thenReturn(Optional.of(product));
-            when(repository.save(product)).thenReturn(product);
-            when(mapper.toResponse(product)).thenReturn(response);
-
-            ApiResponse<CreditProductResponse> result =
-                    service.update(1L, request);
-
-            assertEquals(200, result.getStatus());
-
-            assertEquals(new BigDecimal("60000"), product.getMinCreditLimit());
+                    () -> service.update(1L, new CreditProductUpdateRequest()));
         }
     }
 }

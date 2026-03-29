@@ -14,41 +14,24 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.UUID;
 
-@Tag(name = "Credit Account API", description = "Credit Account management endpoints")
-@RequestMapping("/api/v1/credit-accounts")
+@Tag(name = "Credit Account API")
+@RequestMapping("/api/v1/accounts")
 public interface CreditAccountApi {
 
-    // ================= CUSTOMER =================
+    @Operation(summary = "Get accounts (Customer: own, Admin: all)")
+    @GetMapping
+    ResponseEntity<ApiResponse<List<CreditAccountResponse>>> getAccounts(
+            @AuthenticationPrincipal CustomUserPrincipal principal,
+            @RequestParam(required = false) String status);
 
-    @Operation(summary = "Get all accounts of logged-in customer")
-    @GetMapping("/me")
-    ResponseEntity<ApiResponse<List<CreditAccountResponse>>> getMyAccounts(
-            @AuthenticationPrincipal CustomUserPrincipal principal);
-
-    @Operation(summary = "Get specific account of logged-in customer")
-    @GetMapping("/me/{accountId}")
-    ResponseEntity<ApiResponse<CreditAccountResponse>> getMyAccountById(
+    @Operation(summary = "Get account by ID")
+    @GetMapping("/{accountId}")
+    ResponseEntity<ApiResponse<CreditAccountResponse>> getAccountById(
             @AuthenticationPrincipal CustomUserPrincipal principal,
             @PathVariable UUID accountId);
 
-    // ================= ADMIN =================
-
-    @Operation(summary = "Get all accounts (Admin)")
-    @GetMapping
-    ResponseEntity<ApiResponse<List<CreditAccountResponse>>> getAllAccounts();
-
-    @Operation(summary = "Filter accounts by status (Admin)")
-    @GetMapping(params = "status")
-    ResponseEntity<ApiResponse<List<CreditAccountResponse>>> getAccountsByStatus(
-            @RequestParam String status);
-
-    @Operation(summary = "Get account by ID (Admin)")
-    @GetMapping("/{accountId}")
-    ResponseEntity<ApiResponse<CreditAccountResponse>> getAccountById(
-            @PathVariable UUID accountId);
-
     @Operation(summary = "Update account status (Admin)")
-    @PatchMapping("/{accountId}")
+    @PatchMapping("/{accountId}/status")
     ResponseEntity<ApiResponse<CreditAccountResponse>> updateAccountStatus(
             @PathVariable UUID accountId,
             @Valid @RequestBody CreditAccountStatusUpdateRequest request);

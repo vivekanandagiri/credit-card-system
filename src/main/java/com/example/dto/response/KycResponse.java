@@ -4,12 +4,14 @@ import com.example.enums.KycStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.Instant;
 import java.util.UUID;
 
 @Data
 @AllArgsConstructor
+@NoArgsConstructor
 @Schema(description = "Response containing KYC submission details")
 public class KycResponse {
 

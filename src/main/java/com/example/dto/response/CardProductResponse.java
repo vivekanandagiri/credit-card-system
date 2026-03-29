@@ -6,26 +6,20 @@ import com.example.enums.ProductStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.util.UUID;
 
 @Data
 @AllArgsConstructor
+@NoArgsConstructor
 @Schema(description = "Card product configuration details")
 public class CardProductResponse {
 
     @Schema(description = "Unique identifier of the card product",
             example = "550e8400-e29b-41d4-a716-446655440000")
     private UUID cardProductId;
-
-    @Schema(description = "Associated credit product ID",
-            example = "1")
-    private Long creditProductId;
-
-    @Schema(description = "Associated credit product name",
-            example = "Gold Credit Product")
-    private String creditProductName;
 
     @Schema(description = "Card product display name",
             example = "Gold Visa Card")

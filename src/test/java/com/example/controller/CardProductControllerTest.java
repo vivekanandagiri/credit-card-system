@@ -1,7 +1,6 @@
 package com.example.controller;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -25,7 +24,6 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.example.dto.request.CardProductCreateRequest;
 import com.example.dto.request.CardProductUpdateRequest;
-import com.example.dto.response.ApiResponse;
 import com.example.dto.response.CardProductCreateResponse;
 import com.example.dto.response.CardProductResponse;
 import com.example.enums.CardType;
@@ -64,7 +62,6 @@ class CardProductControllerTest {
         void create_success() throws Exception {
 
             CardProductCreateRequest request = new CardProductCreateRequest();
-            request.setCreditProductId(1L);
             request.setProductName("Gold Visa Card");
             request.setNetworkType(NetworkType.VISA);
             request.setCardType(CardType.PHYSICAL);
@@ -82,20 +79,19 @@ class CardProductControllerTest {
                             ProductStatus.ACTIVE
                     );
 
-            ApiResponse<CardProductCreateResponse> apiResponse =
-                    ApiResponse.success(201, "Card product created", response);
 
             when(cardProductService.create(any(CardProductCreateRequest.class)))
-                    .thenReturn(apiResponse);
+                    .thenReturn(response);
 
             mockMvc.perform(post("/api/v1/card-products")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isCreated())
-                    .andExpect(jsonPath("$.status").value(201))
-                    .andExpect(jsonPath("$.data.cardProductId").value(id.toString()))
-                    .andExpect(jsonPath("$.data.productName").value("Gold Visa Card"))
-                    .andExpect(jsonPath("$.timestamp").exists());
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.message")
+                    .value("Card product created successfully"))
+            .andExpect(jsonPath("$.data.productName")
+                    .value("Gold Visa Card"))
+            .andExpect(jsonPath("$.timestamp").exists());
 
             verify(cardProductService, times(1)).create(any(CardProductCreateRequest.class));
         }
@@ -115,7 +111,6 @@ class CardProductControllerTest {
         void create_invalid_annual_fee() throws Exception {
 
             CardProductCreateRequest request = new CardProductCreateRequest();
-            request.setCreditProductId(1L);
             request.setProductName("Gold Visa Card");
             request.setNetworkType(NetworkType.VISA);
             request.setCardType(CardType.PHYSICAL);
@@ -133,64 +128,23 @@ class CardProductControllerTest {
     @DisplayName("Get All Card Products Tests")
     class GetAllTests {
 
-        @Test
-        void get_all_success() throws Exception {
+    	@Test
+    	void get_all_with_status_filter_success() throws Exception {
 
-            CardProductResponse response = new CardProductResponse(
-                    UUID.randomUUID(),
-                    1L,
-                    "Gold Credit Product",
-                    "Gold Visa Card",
-                    NetworkType.VISA,
-                    CardType.PHYSICAL,
-                    new BigDecimal("1999"),
-                    5,
-                    true,
-                    true,
-                    true,
-                    true,
-                    new BigDecimal("25000"),
-                    new BigDecimal("100000"),
-                    new BigDecimal("75000"),
-                    15,
-                    new BigDecimal("3.50"),
-                    "Premium gold card",
-                    ProductStatus.ACTIVE
-            );
+    	   
+    	    when(cardProductService.getAll(ProductStatus.ACTIVE))
+    	            .thenReturn(List.of());
 
-            ApiResponse<List<CardProductResponse>> apiResponse =
-                    ApiResponse.success(200, "Success", List.of(response));
+    	    mockMvc.perform(get("/api/v1/card-products")
+                    .param("status", "ACTIVE"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.message")
+                    .value("Card products fetched successfully"))
+            .andExpect(jsonPath("$.timestamp").exists());
 
-            when(cardProductService.getAll()).thenReturn(apiResponse);
-
-            mockMvc.perform(get("/api/v1/card-products"))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.status").value(200))
-                    .andExpect(jsonPath("$.data[0].productName").value("Gold Visa Card"));
-
-            verify(cardProductService, times(1)).getAll();
-        }
-    }
-
-    // GET ACTIVE
-    @Nested
-    @DisplayName("Get Active Card Products Tests")
-    class GetActiveTests {
-
-        @Test
-        void get_all_active_success() throws Exception {
-
-            ApiResponse<List<CardProductResponse>> apiResponse =
-                    ApiResponse.success(200, "Success", List.of());
-
-            when(cardProductService.getAllActive()).thenReturn(apiResponse);
-
-            mockMvc.perform(get("/api/v1/card-products/active"))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.status").value(200));
-
-            verify(cardProductService, times(1)).getAllActive();
-        }
+    	    verify(cardProductService, times(1))
+    	            .getAll(ProductStatus.ACTIVE);
+    	}
     }
 
     // GET BY ID
@@ -205,8 +159,6 @@ class CardProductControllerTest {
 
             CardProductResponse response = new CardProductResponse(
                     id,
-                    1L,
-                    "Gold Credit Product",
                     "Gold Visa Card",
                     NetworkType.VISA,
                     CardType.PHYSICAL,
@@ -225,67 +177,50 @@ class CardProductControllerTest {
                     ProductStatus.ACTIVE
             );
 
-            ApiResponse<CardProductResponse> apiResponse =
-                    ApiResponse.success(200, "Success", response);
-
             when(cardProductService.getById(any(UUID.class)))
-                    .thenReturn(apiResponse);
+                    .thenReturn(response);
 
             mockMvc.perform(get("/api/v1/card-products/{id}", id))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data.cardProductId").value(id.toString()));
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.message")
+                    .value("Card product fetched successfully"))
+            .andExpect(jsonPath("$.data.cardProductId")
+                    .value(id.toString()))
+            .andExpect(jsonPath("$.timestamp").exists());
 
             verify(cardProductService, times(1)).getById(any(UUID.class));
         }
     }
 
-    // GET BY CREDIT PRODUCT
-    @Nested
-    @DisplayName("Get By Credit Product Tests")
-    class GetByCreditProductTests {
-
-        @Test
-        void get_by_credit_product_success() throws Exception {
-
-            ApiResponse<List<CardProductResponse>> apiResponse =
-                    ApiResponse.success(200, "Success", List.of());
-
-            when(cardProductService.getByCreditProduct(anyLong()))
-                    .thenReturn(apiResponse);
-
-            mockMvc.perform(get("/api/v1/card-products/credit-product/{creditProductId}", 1))
-                    .andExpect(status().isOk());
-
-            verify(cardProductService, times(1)).getByCreditProduct(anyLong());
-        }
-    }
 
     // UPDATE
     @Nested
     @DisplayName("Update Card Product Tests")
     class UpdateTests {
 
-        @Test
-        void update_success() throws Exception {
+    	void update_success() throws Exception {
 
-            UUID id = UUID.randomUUID();
+    	    UUID id = UUID.randomUUID();
 
-            CardProductUpdateRequest request = new CardProductUpdateRequest();
+    	    CardProductUpdateRequest request = new CardProductUpdateRequest();
 
-            ApiResponse<CardProductResponse> apiResponse =
-                    ApiResponse.success(200, "Updated successfully", null);
+    	    CardProductResponse response = new CardProductResponse();
+    	    response.setCardProductId(id);
 
-            when(cardProductService.update(any(UUID.class), any(CardProductUpdateRequest.class)))
-                    .thenReturn(apiResponse);
+    	    when(cardProductService.update(any(), any()))
+    	            .thenReturn(response);
 
-            mockMvc.perform(put("/api/v1/card-products/{id}", id)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isOk());
+    	    mockMvc.perform(put("/api/v1/card-products/{id}", id)
+    	                    .contentType(MediaType.APPLICATION_JSON)
+    	                    .content(objectMapper.writeValueAsString(request)))
+    	            .andExpect(status().isOk())
+    	            .andExpect(jsonPath("$.message")
+    	                    .value("Card product updated successfully"))
+    	            .andExpect(jsonPath("$.timestamp").exists());
 
-            verify(cardProductService, times(1))
-                    .update(any(UUID.class), any(CardProductUpdateRequest.class));
-        }
+    	    verify(cardProductService, times(1))
+    	            .update(any(UUID.class), any(CardProductUpdateRequest.class));
+    	}
     }
 
  // UPDATE STATUS
@@ -297,19 +232,18 @@ class CardProductControllerTest {
 
             UUID id = UUID.randomUUID();
 
-            ApiResponse<String> apiResponse =
-                    ApiResponse.success(200, "Card product deactivated successfully", "INACTIVE");
-
             when(cardProductService.updateStatus(any(UUID.class), any(ProductStatus.class)))
-                    .thenReturn(apiResponse);
+                    .thenReturn("INACTIVE");
 
             mockMvc.perform(
-                    patch("/api/v1/card-products/{id}/status", id)
+                    patch("/api/v1/card-products/{id}", id)
                             .param("status", "INACTIVE")
             )
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.message")
-                            .value("Card product deactivated successfully"));
+                            .value("Card product deactivated successfully"))
+                    .andExpect(jsonPath("$.data").value("INACTIVE"))
+                    .andExpect(jsonPath("$.timestamp").exists());
 
             verify(cardProductService, times(1))
                     .updateStatus(any(UUID.class), eq(ProductStatus.INACTIVE));

@@ -10,7 +10,7 @@ import java.util.UUID;
 
 public interface CreditCardRepository extends JpaRepository<CreditCard, UUID> {
 
-    List<CreditCard> findAllByCustomerCustomerId(UUID customerId);
+    List<CreditCard> findAllByCreditAccountCustomerCustomerId(UUID customerId);
 
     List<CreditCard> findAllByCreditAccountAccountId(UUID accountId);
 
@@ -27,7 +27,7 @@ public interface CreditCardRepository extends JpaRepository<CreditCard, UUID> {
             List<CardStatus> statuses
     );
 
-    List<CreditCard> findAllByCustomerCustomerIdAndCardStatus(
+    List<CreditCard> findAllByCreditAccountCustomerCustomerIdAndCardStatus(
             UUID customerId,
             CardStatus cardStatus
     );

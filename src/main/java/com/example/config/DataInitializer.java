@@ -1,7 +1,6 @@
 package com.example.config;
 
-import java.time.LocalDateTime;
-
+import java.time.Instant;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -29,7 +28,7 @@ public class DataInitializer {
 				admin.setActive(true);
 				admin.setLocked(false);
 				admin.setFailedAttempts(0);
-				admin.setLastLoginAt(LocalDateTime.now());
+				admin.setLastLoginAt(Instant.now());
 
 				
 				userRepository.save(admin);

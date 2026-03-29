@@ -3,6 +3,7 @@ package com.example.security;
 import java.io.IOException;
 import java.time.Instant;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.stereotype.Component;
@@ -27,16 +28,17 @@ public class CustomAuthenticationEntryPoint implements AuthenticationEntryPoint 
 	public void commence(HttpServletRequest request, HttpServletResponse response,
 			AuthenticationException authException) throws IOException, ServletException {
 		
-		ErrorResponse error = new ErrorResponse(
-				Instant.now(),
-				HttpServletResponse.SC_UNAUTHORIZED,
-				"UNAUTHORIZED",
-				"Authentication required or token Invalid",
-				request.getRequestURI()
-				);
+		ErrorResponse error = ErrorResponse.builder()
+				.timestamp(Instant.now())
+				.status(HttpStatus.UNAUTHORIZED.value())
+				.error(HttpStatus.UNAUTHORIZED.name())
+				.message("Authentication required or token is invalid")
+				.path(request.getRequestURI())
+				.build();
 		
-		response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+		response.setStatus(HttpStatus.UNAUTHORIZED.value());
 		response.setContentType("application/json");
+		
 		objectMapper.writeValue(response.getOutputStream(), error);
 
 	}

@@ -12,6 +12,24 @@ import java.util.UUID;
 import org.hibernate.annotations.JdbcType;
 import org.hibernate.dialect.PostgreSQLEnumJdbcType;
 
+/**
+ * Represents a card product in the product catalog.
+ *
+ * CreditCardProduct is fully INDEPENDENT of CreditProduct.
+ * They are separate catalogs with no direct FK between them.
+ *
+ * CreditProduct  → defines credit rules (APR, limits, eligibility)
+ * CreditCardProduct → defines card features (network, limits, fees)
+ *
+ * They are linked at runtime through:
+ *   Account → CreditProduct  (credit rules for the account)
+ *   Card    → CreditCardProduct (card features for each card)
+ *
+ * This allows the same account to have:
+ *   Card 1 → Visa Platinum
+ *   Card 2 → RuPay Classic
+ * Both sharing the same credit limit and billing cycle.
+ */
 @Entity
 @Table(name = "credit_card_products")
 @Getter
@@ -24,13 +42,6 @@ public class CreditCardProduct extends BaseEntity {
     @GeneratedValue
     @Column(name = "card_product_id")
     private UUID cardProductId;
-
-    // =====================================================
-    // RELATIONSHIP TO CREDIT PRODUCT
-    // =====================================================
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "credit_product_id", nullable = false)
-    private CreditProduct creditProduct;
 
     @Column(name = "product_name", nullable = false)
     private String productName;
@@ -45,18 +56,14 @@ public class CreditCardProduct extends BaseEntity {
     @Column(name = "card_type", nullable = false,columnDefinition = "card_type_enum")
     private CardType cardType;              // Physical,Virtual
 
-    // =====================================================
     // FEES & VALIDITY
-    // =====================================================
     @Column(name = "annual_fee", nullable = false, precision = 19, scale = 4)
     private BigDecimal annualFee;
 
     @Column(name = "card_validity_years", nullable = false)
     private Integer cardValidityYears;
 
-    // =====================================================
     // FEATURES
-    // =====================================================
     @Column(name = "contactless_enabled", nullable = false)
     private Boolean contactlessEnabled;
 
@@ -69,9 +76,7 @@ public class CreditCardProduct extends BaseEntity {
     @Column(name = "atm_withdrawal_allowed", nullable = false)
     private Boolean atmWithdrawalAllowed;
 
-    // =====================================================
     // DAILY LIMITS
-    // =====================================================
     @Column(name = "atm_daily_limit", nullable = false, precision = 19, scale = 4)
     private BigDecimal atmDailyLimit;
 
@@ -81,9 +86,7 @@ public class CreditCardProduct extends BaseEntity {
     @Column(name = "ecommerce_daily_limit", nullable = false, precision = 19, scale = 4)
     private BigDecimal ecommerceDailyLimit;
 
-    // =====================================================
     // BILLING
-    // =====================================================
     @Column(name = "statement_cycle_day", nullable = false)
     private Integer statementCycleDay;     // 1-28
 

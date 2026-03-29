@@ -1,5 +1,8 @@
 package com.example.mapper;
 
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+
 import org.springframework.stereotype.Component;
 
 import com.example.dto.response.CreditCardIssuanceResponse;
@@ -11,10 +14,20 @@ public class CreditCardMapper {
 
     public CreditCardResponse toResponse(CreditCard creditCard) {
 
-        String expiryFormatted = String.format("%02d/%02d",
-                creditCard.getExpiryMonth(),
-                creditCard.getExpiryYear() % 100);
+    	if (creditCard.getExpiresAt() == null) {
+    	    throw new IllegalStateException("Card expiry not set");
+    	}
 
+    	LocalDateTime expiry = LocalDateTime.ofInstant(
+    	        creditCard.getExpiresAt(), ZoneOffset.UTC);
+
+    	int month = expiry.getMonthValue();
+    	int year = expiry.getYear();
+
+    	String expiryFormatted = String.format("%02d/%02d",
+    	        month,
+    	        year % 100);
+    	
         return CreditCardResponse.builder()
                 .cardId(creditCard.getCardId())
 
@@ -23,11 +36,8 @@ public class CreditCardMapper {
                 .accountNumber(creditCard.getCreditAccount().getAccountNumber())
 
                 // CUSTOMER
-                .customerId(creditCard.getCustomer().getCustomerId())
-                .customerName(
-                        creditCard.getCustomer().getFirstName() + " " +
-                        creditCard.getCustomer().getLastName()
-                )
+                .customerId(creditCard.getCreditAccount().getCustomer().getCustomerId())
+                .customerName(creditCard.getCreditAccount().getCustomer().getFirstName()+ " " +creditCard.getCreditAccount().getCustomer().getLastName())
 
                 // PRODUCT
                 .cardProductId(creditCard.getCardProduct().getCardProductId())
@@ -71,17 +81,23 @@ public class CreditCardMapper {
     }
 
     public CreditCardIssuanceResponse toIssueResponse(CreditCard creditCard) {
+    	if (creditCard.getExpiresAt() == null) {
+    	    throw new IllegalStateException("Card expiry not set");
+    	}
+
+    	LocalDateTime expiry = LocalDateTime.ofInstant(
+    	        creditCard.getExpiresAt(), ZoneOffset.UTC);
+
     	String expiryFormatted = String.format("%02d/%02d",
-                creditCard.getExpiryMonth(),
-                creditCard.getExpiryYear() % 100);
-    	
+    	        expiry.getMonthValue(),
+    	        expiry.getYear() % 100);
         return CreditCardIssuanceResponse.builder()
                 .cardId(creditCard.getCardId())
                 .accountId(creditCard.getCreditAccount().getAccountId())
                 .cardStatus(creditCard.getCardStatus()) 
                 .customerName(
-                        creditCard.getCustomer().getFirstName() + " " +
-                        creditCard.getCustomer().getLastName()
+                        creditCard.getCreditAccount().getCustomer().getFirstName() + " " +
+                        creditCard.getCreditAccount().getCustomer().getLastName()
                 )
                 .maskedCardNumber(creditCard.getMaskedCardNumber())
                 .networkType(creditCard.getCardProduct().getNetworkType())

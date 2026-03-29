@@ -6,7 +6,6 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.UUID;
 
 import org.hibernate.annotations.JdbcType;
@@ -68,19 +67,19 @@ public class CreditAccount extends BaseEntity {
     private Integer statementCycleDay;
 
     @Column(name = "last_statement_date")
-    private LocalDate lastStatementDate;
+    private Instant lastStatementDate;
 
     @Column(name = "last_statement_balance", precision = 19, scale = 4)
     private BigDecimal lastStatementBalance;
 
     @Column(name = "next_due_date")
-    private LocalDate nextDueDate;
+    private Instant nextDueDate;
 
     @Column(name = "minimum_due_amount", nullable = false, precision = 19, scale = 4)
     private BigDecimal minimumDueAmount;
 
     @Column(name = "last_payment_date")
-    private LocalDate lastPaymentDate;
+    private Instant lastPaymentDate;
 
     @Column(name = "last_payment_amount", precision = 19, scale = 4)
     private BigDecimal lastPaymentAmount;

@@ -30,28 +30,41 @@ public class CreditProductController implements CreditProductApi {
     public ResponseEntity<ApiResponse<CreditProductCreateResponse>> create(
             CreditProductCreateRequest request) {
 
-        ApiResponse<CreditProductCreateResponse> response =
+       CreditProductCreateResponse response =
                 creditProductService.create(request);
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+       return ResponseEntity.status(HttpStatus.CREATED)
+               .body(ApiResponse.success(
+            		   HttpStatus.CREATED,
+            		   "Credit product created successfully",
+            		   response));
     }
 
     @Override
     public ResponseEntity<ApiResponse<CreditProductResponse>> getById(Long id) {
 
-        ApiResponse<CreditProductResponse> response =
-                creditProductService.getById(id);
+    	 CreditProductResponse response =
+                 creditProductService.getById(id);
 
-        return ResponseEntity.ok(response);
+         return ResponseEntity.ok(
+                 ApiResponse.success(HttpStatus.OK,
+                		 "Credit product fetched successfully",
+                		 response)
+         );
     }
 
     @Override
     public ResponseEntity<ApiResponse<List<CreditProductResponse>>> getAll() {
 
-        ApiResponse<List<CreditProductResponse>> response =
+        List<CreditProductResponse> responses =
                 creditProductService.getAll();
 
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                		HttpStatus.OK,
+                		"Credit products fetched successfully",
+                		responses)
+        );
     }
 
     @Override
@@ -60,14 +73,33 @@ public class CreditProductController implements CreditProductApi {
             Long id,
             CreditProductUpdateRequest request) {
 
-        ApiResponse<CreditProductResponse> response =
+        CreditProductResponse response =
                 creditProductService.update(id, request);
 
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                		HttpStatus.OK,
+                		"Credit product updated successfully", response)
+        );
     }
 
-	@Override
-	public ResponseEntity<ApiResponse<String>> updateStatus(Long id, ProductStatus status) {
-		return ResponseEntity.ok(creditProductService.updateStatus(id, status));
-	}
+    @Override
+    public ResponseEntity<ApiResponse<String>> updateStatus(
+            Long id,
+            ProductStatus status) {
+
+        String result =
+                creditProductService.updateStatus(id, status);
+
+        String message = status == ProductStatus.ACTIVE
+                ? "Credit product activated successfully"
+                : "Credit product deactivated successfully";
+
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                		HttpStatus.OK,
+                		message,
+                		result)
+        );
+    }
 }

@@ -4,7 +4,6 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.UUID;
 
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -113,7 +112,7 @@ private Integer statementCycleDay;
         description = "Date when the last statement was generated",
         example = "2026-03-05"
 )
-private LocalDate lastStatementDate;
+private Instant lastStatementDate;
 
 @Schema(
         description = "Balance amount from the last statement",
@@ -125,7 +124,7 @@ private BigDecimal lastStatementBalance;
         description = "Next payment due date",
         example = "2026-03-25"
 )
-private LocalDate nextDueDate;
+private Instant nextDueDate;
 
 @Schema(
         description = "Minimum payment amount due",
@@ -137,7 +136,7 @@ private BigDecimal minimumDueAmount;
         description = "Date of the last payment made",
         example = "2026-03-10"
 )
-private LocalDate lastPaymentDate;
+private Instant lastPaymentDate;
 
 @Schema(
         description = "Amount of the last payment made",

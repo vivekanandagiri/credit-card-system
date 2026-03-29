@@ -1,8 +1,8 @@
 package com.example.service.ServiceImpl;
 
-import com.example.enums.AccountStatus;
-import com.example.repository.CreditAccountRepository;
 import com.example.service.ActiveAccountChecker;
+import com.example.service.CreditAccountService;
+
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
@@ -23,19 +23,14 @@ import java.util.UUID;
 @Component
 public class IssuedCardActiveCardChecker implements ActiveAccountChecker {
 
-    private final CreditAccountRepository accountRepository;
+	private final CreditAccountService creditAccountService;
 
-    public IssuedCardActiveCardChecker(CreditAccountRepository accountRepository) {
-        this.accountRepository = accountRepository;
+    public IssuedCardActiveCardChecker(CreditAccountService creditAccountService) {
+        this.creditAccountService = creditAccountService;
     }
 
     @Override
     public boolean hasActiveAccount(UUID customerId,Long creditProductId) {
-        return accountRepository
-                .existsByCustomerCustomerIdAndCreditProductCreditProductIdAndAccountStatus(
-                        customerId,
-                        creditProductId,
-                        AccountStatus.ACTIVE
-                );
+        return creditAccountService.hasActiveAccountForProduct(customerId, creditProductId);
     }
 }

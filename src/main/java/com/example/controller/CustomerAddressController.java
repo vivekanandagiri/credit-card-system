@@ -14,6 +14,10 @@ import com.example.dto.response.ApiResponse;
 import com.example.security.CustomUserPrincipal;
 import com.example.service.CustomerAddressService;
 
+/**
+ * REST Controller for Customer Address Management.
+ * Implements Contract-First design via CustomerAddressApi.
+ */
 @RestController
 public class CustomerAddressController implements CustomerAddressApi {
 
@@ -28,28 +32,40 @@ public class CustomerAddressController implements CustomerAddressApi {
             CustomUserPrincipal principal,
             AddressCreateRequest request) {
 
-        ApiResponse<String> response =
-                service.addAddress(principal.getCustomerId(), request);
+        String result = service.addAddress(principal.getUserId(), request);
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(
+                		HttpStatus.CREATED,
+                		"Address added successfully", result));
     }
 
     @Override
     public ResponseEntity<ApiResponse<List<AddressResponse>>> getAddresses(
             CustomUserPrincipal principal) {
 
-        ApiResponse<List<AddressResponse>> response =
-                service.getAddresses(principal.getCustomerId());
-
-        return ResponseEntity.ok(response);
+        List<AddressResponse> result = service.getAddresses(principal.getUserId());
+        
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                		HttpStatus.OK,
+                		"Addresses fetched successfully", result)
+        );
     }
 
     @Override
-    public ResponseEntity<ApiResponse<String>> deleteAddress(UUID addressId) {
+    public ResponseEntity<ApiResponse<String>> deleteAddress(
+            CustomUserPrincipal principal, 
+            @PathVariable UUID addressId) {
 
-        ApiResponse<String> response =
-                service.deleteAddress(addressId);
+        // SECURITY: We pass the principal's ID down to the service layer 
+        // to guarantee the user actually owns the address they are trying to delete.
+        String result = service.deleteAddress(principal.getUserId(), addressId);
 
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                		HttpStatus.OK,
+                		"Address deleted successfully", result)
+        );
     }
 }

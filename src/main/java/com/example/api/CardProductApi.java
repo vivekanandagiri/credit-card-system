@@ -21,7 +21,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import jakarta.validation.Valid;
 
-@Tag(name = "Card Products", description = "Card product management APIs")
+@Tag(name = "Card Products")
 @RequestMapping("/api/v1/card-products")
 public interface CardProductApi {
 
@@ -45,12 +45,8 @@ public interface CardProductApi {
     // GET ALL
     @Operation(summary = "Get all card products")
     @GetMapping
-    ResponseEntity<ApiResponse<List<CardProductResponse>>> getAll();
+    ResponseEntity<ApiResponse<List<CardProductResponse>>> getAll(ProductStatus status);
 
-    // GET ALL ACTIVE
-    @Operation(summary = "Get all active card products")
-    @GetMapping("/active")
-    ResponseEntity<ApiResponse<List<CardProductResponse>>> getAllActive();
 
     // GET BY ID
     @Operation(summary = "Get card product by ID")
@@ -69,15 +65,6 @@ public interface CardProductApi {
             @PathVariable UUID id
     );
 
-    // =====================================================
-    // GET BY CREDIT PRODUCT
-    // =====================================================
-    @Operation(summary = "Get card products by credit product ID")
-    @GetMapping("/credit-product/{creditProductId}")
-    ResponseEntity<ApiResponse<List<CardProductResponse>>> getByCreditProduct(
-            @PathVariable Long creditProductId
-    );
-
     // UPDATE
     @Operation(summary = "Update card product(Admin)")
     @PutMapping("/{id}")
@@ -88,9 +75,11 @@ public interface CardProductApi {
 
     // Update Status
     @Operation(summary = "Activate or deactivate card product(Admin)")
-    @PatchMapping("/{id}/status")
+    @PatchMapping("/{id}")
     ResponseEntity<ApiResponse<String>> updateStatus(
             @PathVariable UUID id,
             @Valid@RequestParam ProductStatus status
     );
+
+	
 }

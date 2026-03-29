@@ -6,7 +6,6 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.List;
 
 import org.hibernate.annotations.JdbcType;
 import org.hibernate.dialect.PostgreSQLEnumJdbcType;
@@ -30,27 +29,21 @@ public class CreditProduct extends BaseEntity {
     @Column(name = "product_name", nullable = false)
     private String productName;
 
-    // =====================================================
     // CREDIT LIMITS
-    // =====================================================
     @Column(name = "min_credit_limit", nullable = false, precision = 19, scale = 4)
     private BigDecimal minCreditLimit;
 
     @Column(name = "max_credit_limit", nullable = false, precision = 19, scale = 4)
     private BigDecimal maxCreditLimit;
 
-    // =====================================================
     // ELIGIBILITY
-    // =====================================================
     @Column(name = "min_income_required", nullable = false, precision = 19, scale = 4)
     private BigDecimal minIncomeRequired;
 
     @Column(name = "min_credit_score", nullable = false)
     private Integer minCreditScore;
 
-    // =====================================================
     // APR & INTEREST
-    // =====================================================
     @Column(name = "apr_purchase", nullable = false, precision = 5, scale = 2)
     private BigDecimal aprPurchase;
 
@@ -63,18 +56,14 @@ public class CreditProduct extends BaseEntity {
     @Column(name = "interest_calculation_method", nullable = false)
     private String interestCalculationMethod;
 
-    // =====================================================
     // MINIMUM DUE
-    // =====================================================
     @Column(name = "minimum_due_percent", nullable = false, precision = 5, scale = 2)
     private BigDecimal minimumDuePercent;
 
     @Column(name = "minimum_due_amount", nullable = false, precision = 19, scale = 4)
     private BigDecimal minimumDueAmount;
 
-    // =====================================================
     // FEES
-    // =====================================================
     @Column(name = "late_fee_amount", nullable = false, precision = 19, scale = 4)
     private BigDecimal lateFeeAmount;
 
@@ -96,9 +85,7 @@ public class CreditProduct extends BaseEntity {
     @Column(name = "cash_advance_fee_min", nullable = false, precision = 19, scale = 4)
     private BigDecimal cashAdvanceFeeMin;
 
-    // =====================================================
     // VALIDITY & STATUS
-    // =====================================================
     @Column(name = "effective_from", nullable = false)
     private LocalDate effectiveFrom;
 
@@ -109,10 +96,4 @@ public class CreditProduct extends BaseEntity {
     @JdbcType(PostgreSQLEnumJdbcType.class)
     @Column(name = "status", nullable = false,columnDefinition = "product_status_enum")
     private ProductStatus status;
-
-    // =====================================================
-    // RELATIONSHIP
-    // =====================================================
-    @OneToMany(mappedBy = "creditProduct", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<CreditCardProduct> cardProducts;
 }

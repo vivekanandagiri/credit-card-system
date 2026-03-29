@@ -2,39 +2,28 @@ package com.example.service;
 
 import com.example.dto.request.ApplicationDecisionRequest;
 import com.example.dto.request.CreditCardApplicationRequest;
-import com.example.dto.response.ApiResponse;
-import com.example.dto.response.CreditCardApplicationCreateResponse;
 import com.example.dto.response.CreditCardApplicationResponse;
+import com.example.dto.response.CreditCardApplicationSummaryResponse;
+
 import java.util.List;
 import java.util.UUID;
 
 public interface CreditAccountApplicationService {
 
-    // Customer — view available card products before applying
-	// ApiResponse<List<CreditProductResponse>> getAvailableCreditProducts();
+	CreditCardApplicationSummaryResponse apply(UUID userId, CreditCardApplicationRequest request);
 
-    // Customer — submit application
-    ApiResponse<CreditCardApplicationCreateResponse> apply(UUID userId,
-                                                     CreditCardApplicationRequest request);
+    List<CreditCardApplicationSummaryResponse> getCustomerApplications(UUID userId);
 
-    // Customer — view own applications
-    ApiResponse<List<CreditCardApplicationResponse>> getMyApplications(UUID userId);
+    List<CreditCardApplicationSummaryResponse> getCustomerApplicationsByStatus(UUID userId, String status);
 
-    // Customer — view single application
-    ApiResponse<CreditCardApplicationResponse> getMyApplicationById(UUID userId,
-                                                                    UUID applicationId);
-    //Customer -view single Application
-    ApiResponse<CreditCardApplicationResponse> getApplicationById(UUID applicationId);
-    
-    // Admin — view all applications
-    ApiResponse<List<CreditCardApplicationResponse>> getAllApplications();
+    CreditCardApplicationResponse getCustomerApplicationById(UUID customerId, UUID applicationId);
 
-    // Admin — view applications by status
-    ApiResponse<List<CreditCardApplicationResponse>> getApplicationsByStatus(String status);
+    CreditCardApplicationResponse getApplicationById(UUID applicationId);
 
-    // Admin — manually approve or reject (for PENDING_REVIEW cases)
-    ApiResponse<CreditCardApplicationResponse> decide(UUID applicationId,
-                                                      ApplicationDecisionRequest request);
+    List<CreditCardApplicationSummaryResponse> getAllApplications();
 
+    List<CreditCardApplicationSummaryResponse> getApplicationsByStatus(String status);
+
+    CreditCardApplicationResponse decide(UUID applicationId, ApplicationDecisionRequest request);
 	
 }

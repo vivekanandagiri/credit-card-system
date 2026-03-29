@@ -8,7 +8,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.example.dto.request.CreditProductCreateRequest;
 import com.example.dto.request.CreditProductUpdateRequest;
-import com.example.dto.response.ApiResponse;
 import com.example.dto.response.CreditProductCreateResponse;
 import com.example.dto.response.CreditProductResponse;
 import com.example.enums.ProductStatus;
@@ -32,7 +31,6 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -57,9 +55,6 @@ class CreditProductControllerTest {
 
     @Autowired
     private ObjectMapper objectMapper;
-
-    private static final Instant FIXED_TIME =
-            Instant.parse("2024-01-01T10:00:00Z");
 
     private CreditProductResponse buildResponse() {
 
@@ -100,18 +95,15 @@ class CreditProductControllerTest {
         	                ProductStatus.ACTIVE
         	        );
 
-        	ApiResponse<CreditProductCreateResponse> apiResponse =
-        	        new ApiResponse<>(FIXED_TIME, 201,
-        	                "Credit Product Created Successfully", product);
-
         	when(creditProductService.create(any()))
-        	        .thenReturn(apiResponse);
+        	        .thenReturn(product);
 
-            mockMvc.perform(post("/credit-products")
+            mockMvc.perform(post("/api/v1/credit-products")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isCreated())
-                    .andExpect(jsonPath("$.status").value(201))
+                    .andExpect(jsonPath("$.message")
+                            .value("Credit product created successfully"))
                     .andExpect(jsonPath("$.data.productName")
                             .value("Gold Credit Card"))
                     .andExpect(jsonPath("$.timestamp").exists());
@@ -130,16 +122,14 @@ class CreditProductControllerTest {
 
             CreditProductResponse product = buildResponse();
 
-            ApiResponse<CreditProductResponse> apiResponse =
-                    new ApiResponse<>(FIXED_TIME, 200,
-                            "Credit Product fetched Successfully", product);
-
+           
             when(creditProductService.getById(1L))
-                    .thenReturn(apiResponse);
+                    .thenReturn(product);
 
-            mockMvc.perform(get("/credit-products/{id}", 1))
+            mockMvc.perform(get("/api/v1/credit-products/{id}", 1))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.status").value(200))
+                    .andExpect(jsonPath("$.message")
+                            .value("Credit product fetched successfully"))
                     .andExpect(jsonPath("$.data.productName")
                             .value("Gold Credit Card"))
                     .andExpect(jsonPath("$.timestamp").exists());
@@ -158,16 +148,13 @@ class CreditProductControllerTest {
 
             CreditProductResponse product = buildResponse();
 
-            ApiResponse<List<CreditProductResponse>> apiResponse =
-                    new ApiResponse<>(FIXED_TIME, 200,
-                            "Credit products fetched Successfully",
-                            List.of(product));
-
             when(creditProductService.getAll())
-                    .thenReturn(apiResponse);
+                    .thenReturn(List.of(product));
 
-            mockMvc.perform(get("/credit-products"))
+            mockMvc.perform(get("/api/v1/credit-products"))
                     .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.message")
+                            .value("Credit products fetched successfully"))
                     .andExpect(jsonPath("$.status").value(200))
                     .andExpect(jsonPath("$.data[0].productName")
                             .value("Gold Credit Card"))
@@ -191,17 +178,16 @@ class CreditProductControllerTest {
             CreditProductResponse product = buildResponse();
             product.setProductName("Updated Gold Card");
 
-            ApiResponse<CreditProductResponse> apiResponse =
-                    new ApiResponse<>(FIXED_TIME, 200,
-                            "Credit product updated successfully", product);
 
             when(creditProductService.update(eq(1L), any()))
-                    .thenReturn(apiResponse);
+                    .thenReturn(product);
 
-            mockMvc.perform(put("/credit-products/{id}", 1)
+            mockMvc.perform(put("/api/v1/credit-products/{id}", 1)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.message")
+                            .value("Credit product updated successfully"))
                     .andExpect(jsonPath("$.status").value(200))
                     .andExpect(jsonPath("$.data.productName")
                             .value("Updated Gold Card"))
@@ -223,7 +209,7 @@ class CreditProductControllerTest {
             when(creditProductService.getById(99L))
                     .thenThrow(new ResourceNotFoundException("Product not found"));
 
-            mockMvc.perform(get("/credit-products/{id}", 99))
+            mockMvc.perform(get("/api/v1/credit-products/{id}", 99))
                     .andExpect(status().isNotFound());
 
             verify(creditProductService, times(1)).getById(99L);

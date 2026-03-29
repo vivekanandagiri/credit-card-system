@@ -17,7 +17,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import jakarta.validation.Valid;
 
-@Tag(name = "Customer Profile", description = "Customer profile management APIs")
+@Tag(name = "Customer Profile")
 @RequestMapping("/api/v1/customers/profile")
 public interface CustomerProfileApi {
 

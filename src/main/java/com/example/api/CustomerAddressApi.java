@@ -20,7 +20,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import jakarta.validation.Valid;
 
-@Tag(name = "Customer Address", description = "Customer address management APIs")
+@Tag(name = "Customer Address")
 @RequestMapping("/api/v1/customers/addresses")
 public interface CustomerAddressApi {
 
@@ -87,8 +87,7 @@ public interface CustomerAddressApi {
                     description = "Address not found"
             )
     })
-    @DeleteMapping("/{addressId}")
     ResponseEntity<ApiResponse<String>> deleteAddress(
-            @PathVariable UUID addressId
-    );
+            CustomUserPrincipal principal, 
+            @PathVariable UUID addressId);
 }

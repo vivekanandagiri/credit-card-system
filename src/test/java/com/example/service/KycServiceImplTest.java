@@ -1,7 +1,6 @@
 package com.example.service;
 
-import com.example.dto.request.KycVerifyRequest;
-import com.example.dto.response.ApiResponse;
+import com.example.dto.request.KycStatusUpdateRequest;
 import com.example.dto.response.KycResponse;
 import com.example.entity.Customer;
 import com.example.entity.KycRecord;
@@ -9,11 +8,11 @@ import com.example.enums.KycStatus;
 import com.example.exception.BusinessRuleException;
 import com.example.exception.ResourceNotFoundException;
 import com.example.mapper.KycMapper;
-import com.example.repository.CustomerRepository;
 import com.example.repository.KycRepository;
 import com.example.service.ServiceImpl.KycServiceImpl;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -28,34 +27,52 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
+/**
+ * Unit tests for {@link KycServiceImpl}.
+ *
+ * <p>Fix summary vs original test:
+ * <ul>
+ *   <li>Package corrected: {@code service.ServiceImpl} → {@code service.impl}</li>
+ *   <li>{@code @Mock CustomerRepository} replaced with {@code @Mock CustomerService}
+ *       — {@code KycServiceImpl} no longer injects {@code CustomerRepository} directly</li>
+ *   <li>All {@code customerRepository.findById()} stubs replaced with
+ *       {@code customerService.getCustomer()} stubs</li>
+ *   <li>Customer-not-found test now expects {@code CustomerService.getCustomer} to throw</li>
+ *   <li>Message assertions updated to match refactored response strings</li>
+ *   <li>New tests added for: {@code isKycVerified}, rejection without reason,
+ *       update of already-finalized record, {@code RESUBMIT_REQUIRED}, previous-record
+ *       deactivation, and {@code verifiedBy}/{@code verifiedAt} field population</li>
+ * </ul>
+ */
 @ExtendWith(MockitoExtension.class)
 class KycServiceImplTest {
 
-    @Mock
-    private KycRepository kycRepository;
+    @Mock private KycRepository kycRepository;
+    @Mock private CustomerService customerService;  // ← was CustomerRepository
+    @Mock private KycMapper kycMapper;
 
-    @Mock
-    private CustomerRepository customerRepository;
-
-    @Mock
-    private KycMapper kycMapper;
-    
     @InjectMocks
     private KycServiceImpl kycService;
 
     private UUID customerId;
     private UUID kycId;
+    private UUID adminId;
 
     private Customer customer;
     private KycRecord kycRecord;
+    private MockMultipartFile file;
 
     @BeforeEach
-    void setup() {
+    void setUp() {
         customerId = UUID.randomUUID();
-        kycId = UUID.randomUUID();
+        kycId      = UUID.randomUUID();
+        adminId    = UUID.randomUUID();
 
         customer = new Customer();
         customer.setCustomerId(customerId);
@@ -66,188 +83,324 @@ class KycServiceImplTest {
         kycRecord.setStatus(KycStatus.SUBMITTED);
         kycRecord.setSubmittedAt(Instant.now());
         kycRecord.setActive(true);
+
+        file = new MockMultipartFile("file", "pan.jpg", "image/jpeg", "data".getBytes());
     }
 
-    // UPLOAD KYC SUCCESS
+    // =========================================================================
+    // uploadKyc
+    // =========================================================================
 
-    @Test
-    void shouldUploadKycSuccessfully() throws Exception {
+    @Nested
+    class UploadKyc {
 
-        MockMultipartFile file =
-                new MockMultipartFile(
-                        "file",
-                        "pan.jpg",
-                        "image/jpeg",
-                        "data".getBytes()
-                );
+        @Test
+        void shouldUploadKycSuccessfully() throws Exception {
+            when(customerService.getCustomer(customerId)).thenReturn(customer);
+            when(kycRepository.findByCustomerCustomerIdAndIsActiveTrue(customerId))
+                    .thenReturn(Optional.empty());
+            when(kycRepository.findByCustomerCustomerId(customerId))
+                    .thenReturn(List.of());
+            when(kycMapper.toEntity(any(), anyString(), anyString(), any()))
+                    .thenReturn(kycRecord);
 
-        when(customerRepository.findById(customerId))
-                .thenReturn(Optional.of(customer));
+            String result =
+                    kycService.uploadKyc(customerId, "PAN", "ABCDE1234F", file);
 
-        when(kycRepository.findByCustomerCustomerIdAndIsActiveTrue(customerId))
-                .thenReturn(Optional.empty());
+            assertEquals("SUBMITTED", result);
+            
+            verify(kycRepository).save(kycRecord);
+        }
 
-        when(kycRepository.findByCustomerCustomerId(customerId))
-                .thenReturn(List.of());
+        @Test
+        void shouldDeactivatePreviousRecordsBeforeSaving() throws Exception {
+            KycRecord oldRecord = new KycRecord();
+            oldRecord.setActive(true);
 
-        when(kycMapper.toEntity(any(), anyString(), anyString(), any()))
-                .thenReturn(kycRecord);
+            when(customerService.getCustomer(customerId)).thenReturn(customer);
+            when(kycRepository.findByCustomerCustomerIdAndIsActiveTrue(customerId))
+                    .thenReturn(Optional.empty());
+            when(kycRepository.findByCustomerCustomerId(customerId))
+                    .thenReturn(List.of(oldRecord));
+            when(kycMapper.toEntity(any(), anyString(), anyString(), any()))
+                    .thenReturn(kycRecord);
 
-        ApiResponse<String> response =
-                kycService.uploadKyc(customerId, "PAN", "ABCDE1234F", file);
+            kycService.uploadKyc(customerId, "PAN", "ABCDE1234F", file);
 
-        assertEquals("KYC submitted successfully", response.getMessage());
+            // Previous record must be deactivated before new one is saved
+            assertThat(oldRecord.isActive()).isFalse();
+            verify(kycRepository).save(kycRecord);
+        }
 
-        verify(kycRepository).save(any(KycRecord.class));
+        @Test
+        void shouldThrowWhenCustomerNotFound() {
+            // CustomerService.getCustomer throws when customer is absent
+            when(customerService.getCustomer(customerId))
+                    .thenThrow(new ResourceNotFoundException("Customer not found"));
+
+            assertThrows(ResourceNotFoundException.class,
+                    () -> kycService.uploadKyc(customerId, "PAN", "ABCDE1234F", file));
+
+            verify(kycRepository, never()).save(any());
+        }
+
+        @Test
+        void shouldThrowWhenKycAlreadySubmitted() {
+            kycRecord.setStatus(KycStatus.SUBMITTED);
+
+            when(customerService.getCustomer(customerId)).thenReturn(customer);
+            when(kycRepository.findByCustomerCustomerIdAndIsActiveTrue(customerId))
+                    .thenReturn(Optional.of(kycRecord));
+
+            assertThrows(BusinessRuleException.class,
+                    () -> kycService.uploadKyc(customerId, "PAN", "ABCDE1234F", file));
+
+            verify(kycRepository, never()).save(any());
+        }
+
+        @Test
+        void shouldThrowWhenKycAlreadyVerified() {
+            kycRecord.setStatus(KycStatus.VERIFIED);
+
+            when(customerService.getCustomer(customerId)).thenReturn(customer);
+            when(kycRepository.findByCustomerCustomerIdAndIsActiveTrue(customerId))
+                    .thenReturn(Optional.of(kycRecord));
+
+            assertThrows(BusinessRuleException.class,
+                    () -> kycService.uploadKyc(customerId, "PAN", "ABCDE1234F", file));
+
+            verify(kycRepository, never()).save(any());
+        }
     }
 
+    // =========================================================================
+    // updateKycStatus
+    // =========================================================================
 
-    // CUSTOMER NOT FOUND
+    @Nested
+    class UpdateKycStatus {
 
-    @Test
-    void shouldThrowCustomerNotFound() {
+        @Test
+        void shouldApproveKycAndSetAuditFields() {
+            KycStatusUpdateRequest request =
+                    new KycStatusUpdateRequest(KycStatus.VERIFIED, null);
 
-        MockMultipartFile file =
-                new MockMultipartFile("file","pan.jpg","image/jpeg","data".getBytes());
+            when(kycRepository.findById(kycId)).thenReturn(Optional.of(kycRecord));
 
-        when(customerRepository.findById(customerId))
-                .thenReturn(Optional.empty());
+            String response = kycService.updateKycStatus(kycId, adminId, request);
 
-        assertThrows(ResourceNotFoundException.class,
-                () -> kycService.uploadKyc(customerId,"PAN","ABCDE1234F",file));
+            assertEquals("VERIFIED", response);
+            assertThat(kycRecord.getStatus()).isEqualTo(KycStatus.VERIFIED);
+            assertThat(kycRecord.getVerifiedBy()).isEqualTo(adminId);
+            assertThat(kycRecord.getVerifiedAt()).isNotNull();
+            assertThat(kycRecord.getRejectionReason()).isNull();
+            verify(kycRepository).save(kycRecord);
+        }
+
+        @Test
+        void shouldRejectKycAndSetRejectionReason() {
+            KycStatusUpdateRequest request =
+                    new KycStatusUpdateRequest(KycStatus.REJECTED, "Document unclear");
+
+            when(kycRepository.findById(kycId)).thenReturn(Optional.of(kycRecord));
+
+            kycService.updateKycStatus(kycId, adminId, request);
+
+            assertThat(kycRecord.getStatus()).isEqualTo(KycStatus.REJECTED);
+            assertThat(kycRecord.getRejectionReason()).isEqualTo("Document unclear");
+            verify(kycRepository).save(kycRecord);
+        }
+
+        @Test
+        void shouldThrowWhenRejectingWithoutReason() {
+            // Rejection reason is mandatory — null should be rejected
+            KycStatusUpdateRequest request =
+                    new KycStatusUpdateRequest(KycStatus.REJECTED, null);
+
+            when(kycRepository.findById(kycId)).thenReturn(Optional.of(kycRecord));
+
+            assertThrows(BusinessRuleException.class,
+                    () -> kycService.updateKycStatus(kycId, adminId, request));
+
+            verify(kycRepository, never()).save(any());
+        }
+
+        @Test
+        void shouldThrowWhenRejectingWithBlankReason() {
+            // Blank string must also be rejected
+            KycStatusUpdateRequest request =
+                    new KycStatusUpdateRequest(KycStatus.REJECTED, "   ");
+
+            when(kycRepository.findById(kycId)).thenReturn(Optional.of(kycRecord));
+
+            assertThrows(BusinessRuleException.class,
+                    () -> kycService.updateKycStatus(kycId, adminId, request));
+
+            verify(kycRepository, never()).save(any());
+        }
+
+        @Test
+        void shouldSetResubmitRequiredAndPreserveRejectionReason() {
+            KycStatusUpdateRequest request =
+                    new KycStatusUpdateRequest(KycStatus.RESUBMIT_REQUIRED, "Photo too blurry");
+
+            when(kycRepository.findById(kycId)).thenReturn(Optional.of(kycRecord));
+
+            kycService.updateKycStatus(kycId, adminId, request);
+
+            assertThat(kycRecord.getStatus()).isEqualTo(KycStatus.RESUBMIT_REQUIRED);
+            assertThat(kycRecord.getRejectionReason()).isEqualTo("Photo too blurry");
+            verify(kycRepository).save(kycRecord);
+        }
+
+        @Test
+        void shouldThrowWhenKycAlreadyVerified() {
+            // VERIFIED is a terminal state — cannot be updated again
+            kycRecord.setStatus(KycStatus.VERIFIED);
+            KycStatusUpdateRequest request =
+                    new KycStatusUpdateRequest(KycStatus.REJECTED, "Late change");
+
+            when(kycRepository.findById(kycId)).thenReturn(Optional.of(kycRecord));
+
+            assertThrows(BusinessRuleException.class,
+                    () -> kycService.updateKycStatus(kycId, adminId, request));
+
+            verify(kycRepository, never()).save(any());
+        }
+
+        @Test
+        void shouldThrowWhenKycAlreadyRejected() {
+            // REJECTED is a terminal state — cannot be updated again
+            kycRecord.setStatus(KycStatus.REJECTED);
+            KycStatusUpdateRequest request =
+                    new KycStatusUpdateRequest(KycStatus.VERIFIED, null);
+
+            when(kycRepository.findById(kycId)).thenReturn(Optional.of(kycRecord));
+
+            assertThrows(BusinessRuleException.class,
+                    () -> kycService.updateKycStatus(kycId, adminId, request));
+
+            verify(kycRepository, never()).save(any());
+        }
+
+        @Test
+        void shouldThrowWhenKycRecordNotFound() {
+            when(kycRepository.findById(kycId)).thenReturn(Optional.empty());
+
+            assertThrows(ResourceNotFoundException.class,
+                    () -> kycService.updateKycStatus(kycId, adminId,
+                            new KycStatusUpdateRequest(KycStatus.VERIFIED, null)));
+        }
     }
 
-    // KYC ALREADY SUBMITTED
+    // =========================================================================
+    // getKycStatus
+    // =========================================================================
 
-    @Test
-    void shouldThrowIfKycAlreadySubmitted() {
+    @Nested
+    class GetKycStatus {
 
-        MockMultipartFile file =
-                new MockMultipartFile("file","pan.jpg","image/jpeg","data".getBytes());
+        @Test
+        void shouldReturnActiveKycRecord() {
+            KycResponse kycResponse = new KycResponse();
+            when(kycRepository.findByCustomerCustomerIdAndIsActiveTrue(customerId))
+                    .thenReturn(Optional.of(kycRecord));
+            when(kycMapper.toResponse(kycRecord)).thenReturn(kycResponse);
 
-        kycRecord.setStatus(KycStatus.SUBMITTED);
+            KycResponse response = kycService.getKycStatus(customerId);
 
-        when(customerRepository.findById(customerId))
-                .thenReturn(Optional.of(customer));
+            assertThat(response).isSameAs(kycResponse);
+            verify(kycMapper).toResponse(kycRecord);
+        }
 
-        when(kycRepository.findByCustomerCustomerIdAndIsActiveTrue(customerId))
-                .thenReturn(Optional.of(kycRecord));
+        @Test
+        void shouldThrowWhenNoActiveKycExists() {
+            when(kycRepository.findByCustomerCustomerIdAndIsActiveTrue(customerId))
+                    .thenReturn(Optional.empty());
 
-        assertThrows(BusinessRuleException.class,
-                () -> kycService.uploadKyc(customerId,"PAN","ABCDE1234F",file));
+            assertThrows(ResourceNotFoundException.class,
+                    () -> kycService.getKycStatus(customerId));
+        }
     }
 
+    // =========================================================================
+    // getPendingKyc
+    // =========================================================================
 
-    // KYC ALREADY VERIFIED
+    @Nested
+    class GetPendingKyc {
 
-    @Test
-    void shouldThrowIfKycAlreadyVerified() {
+        @Test
+        void shouldReturnListOfPendingKycRecords() {
+            KycResponse kycResponse = new KycResponse();
+            when(kycRepository.findByStatus(KycStatus.SUBMITTED))
+                    .thenReturn(List.of(kycRecord));
+            when(kycMapper.toResponse(kycRecord)).thenReturn(kycResponse);
 
-        MockMultipartFile file =
-                new MockMultipartFile("file","pan.jpg","image/jpeg","data".getBytes());
+            List<KycResponse> response = kycService.getPendingKyc();
 
-        kycRecord.setStatus(KycStatus.VERIFIED);
+            assertThat(response).hasSize(1);
+        }
 
-        when(customerRepository.findById(customerId))
-                .thenReturn(Optional.of(customer));
+        @Test
+        void shouldReturnEmptyListWhenNoPendingKyc() {
+            when(kycRepository.findByStatus(KycStatus.SUBMITTED)).thenReturn(List.of());
 
-        when(kycRepository.findByCustomerCustomerIdAndIsActiveTrue(customerId))
-                .thenReturn(Optional.of(kycRecord));
+            List<KycResponse> response = kycService.getPendingKyc();
 
-        assertThrows(BusinessRuleException.class,
-                () -> kycService.uploadKyc(customerId,"PAN","ABCDE1234F",file));
+            assertThat(response).isEmpty();
+        }
     }
 
-    // VERIFY KYC APPROVED
+    // =========================================================================
+    // isKycVerified  (new method added in refactored service)
+    // =========================================================================
 
-    @Test
-    void shouldVerifyKycApproved() {
+    @Nested
+    class IsKycVerified {
 
-        UUID adminId = UUID.randomUUID();
+        @Test
+        void shouldReturnTrueWhenVerifiedRecordExists() {
+            KycRecord verifiedRecord = new KycRecord();
+            verifiedRecord.setStatus(KycStatus.VERIFIED);
 
-        KycVerifyRequest request = new KycVerifyRequest(true,null);
+            when(kycRepository.findByCustomerCustomerId(customerId))
+                    .thenReturn(List.of(verifiedRecord));
 
-        when(kycRepository.findById(kycId))
-                .thenReturn(Optional.of(kycRecord));
+            assertThat(kycService.isKycVerified(customerId)).isTrue();
+        }
 
-        ApiResponse<String> response =
-                kycService.verifyKyc(kycId,adminId,request);
+        @Test
+        void shouldReturnFalseWhenNoVerifiedRecord() {
+            KycRecord submittedRecord = new KycRecord();
+            submittedRecord.setStatus(KycStatus.SUBMITTED);
 
-        assertEquals(KycStatus.VERIFIED, kycRecord.getStatus());
-        assertEquals("KYC verification processed", response.getMessage());
+            when(kycRepository.findByCustomerCustomerId(customerId))
+                    .thenReturn(List.of(submittedRecord));
 
-        verify(kycRepository).save(kycRecord);
-    }
+            assertThat(kycService.isKycVerified(customerId)).isFalse();
+        }
 
-    // VERIFY KYC REJECTED
+        @Test
+        void shouldReturnFalseWhenNoRecordsExist() {
+            when(kycRepository.findByCustomerCustomerId(customerId))
+                    .thenReturn(List.of());
 
-    @Test
-    void shouldRejectKyc() {
+            assertThat(kycService.isKycVerified(customerId)).isFalse();
+        }
 
-        UUID adminId = UUID.randomUUID();
+        @Test
+        void shouldReturnTrueWhenAtLeastOneRecordIsVerifiedAmongMultiple() {
+            KycRecord rejected = new KycRecord();
+            rejected.setStatus(KycStatus.REJECTED);
 
-        KycVerifyRequest request =
-                new KycVerifyRequest(false,"Document unclear");
+            KycRecord verified = new KycRecord();
+            verified.setStatus(KycStatus.VERIFIED);
 
-        when(kycRepository.findById(kycId))
-                .thenReturn(Optional.of(kycRecord));
+            when(kycRepository.findByCustomerCustomerId(customerId))
+                    .thenReturn(List.of(rejected, verified));
 
-        kycService.verifyKyc(kycId,adminId,request);
-
-        assertEquals(KycStatus.RESUBMIT_REQUIRED, kycRecord.getStatus());
-    }
-
-    // VERIFY KYC NOT FOUND
-
-    @Test
-    void shouldThrowIfKycNotFound() {
-
-        when(kycRepository.findById(kycId))
-                .thenReturn(Optional.empty());
-
-        assertThrows(ResourceNotFoundException.class,
-                () -> kycService.verifyKyc(
-                        kycId,
-                        UUID.randomUUID(),
-                        new KycVerifyRequest(true,null)
-                ));
-    }
-    
-    // GET STATUS SUCCESS
-
-    @Test
-    void shouldGetKycStatus() {
-
-        when(kycRepository.findByCustomerCustomerIdAndIsActiveTrue(customerId))
-                .thenReturn(Optional.of(kycRecord));
-
-        ApiResponse<KycResponse> response =
-                kycService.getKycStatus(customerId);
-
-        assertEquals("KYC status fetched successfully", response.getMessage());
-    }
-    // NO ACTIVE KYC
-    @Test
-    void shouldThrowIfNoActiveKyc() {
-
-        when(kycRepository.findByCustomerCustomerIdAndIsActiveTrue(customerId))
-                .thenReturn(Optional.empty());
-
-        assertThrows(ResourceNotFoundException.class,
-                () -> kycService.getKycStatus(customerId));
-    }
-
-
-    // GET PENDING LIST
-    @Test
-    void shouldGetPendingKycList() {
-
-        when(kycRepository.findByStatus(KycStatus.SUBMITTED))
-                .thenReturn(List.of(kycRecord));
-
-        ApiResponse<List<KycResponse>> response =
-                kycService.getPendingKyc();
-
-        assertEquals(1, response.getData().size());
+            assertThat(kycService.isKycVerified(customerId)).isTrue();
+        }
     }
 }

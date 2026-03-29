@@ -1,19 +1,22 @@
 package com.example.controller;
 
-import com.example.api.CreditAccountApi;
-import com.example.dto.request.CreditAccountStatusUpdateRequest;
-import com.example.dto.response.CreditAccountResponse;
-import com.example.dto.response.ApiResponse;
-import com.example.security.CustomUserPrincipal;
-import com.example.service.CreditAccountService;
-import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
+
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-import java.util.UUID;
+import com.example.api.CreditAccountApi;
+import com.example.dto.request.CreditAccountStatusUpdateRequest;
+import com.example.dto.response.ApiResponse;
+import com.example.dto.response.CreditAccountResponse;
+import com.example.security.CustomUserPrincipal;
+import com.example.service.CreditAccountService;
+
+import jakarta.validation.Valid;
 
 @RestController
 public class CreditAccountController implements CreditAccountApi {
@@ -21,55 +24,81 @@ public class CreditAccountController implements CreditAccountApi {
     private final CreditAccountService accountService;
 
     public CreditAccountController(CreditAccountService accountService) {
-		this.accountService = accountService;
-	}
-
-	@Override
-    @PreAuthorize("hasRole('CUSTOMER')")
-    public ResponseEntity<ApiResponse<List<CreditAccountResponse>>> getMyAccounts(
-            @AuthenticationPrincipal CustomUserPrincipal principal) {
-
-        return ResponseEntity.ok(
-                accountService.getMyAccounts(principal.getUserId()));
+        this.accountService = accountService;
     }
 
+
+    /**
+     * CUSTOMER → gets only their accounts
+     * ADMIN → gets all accounts (optional filter by status)
+     *
+     * GET /api/v1/accounts
+     */
     @Override
-    @PreAuthorize("hasRole('CUSTOMER')")
-    public ResponseEntity<ApiResponse<CreditAccountResponse>> getMyAccountById(
+    @PreAuthorize("hasAnyRole('CUSTOMER','ADMIN')")
+    public ResponseEntity<ApiResponse<List<CreditAccountResponse>>> getAccounts(
             @AuthenticationPrincipal CustomUserPrincipal principal,
-            UUID accountId) {
+            @RequestParam(required = false) String status) {
+
+    	List<CreditAccountResponse> responses =
+                accountService.getAccounts(
+                        principal.getUserId(),
+                        principal.getRole().name(),
+                        status
+                );
 
         return ResponseEntity.ok(
-                accountService.getMyAccountById(principal.getUserId(), accountId));
+                ApiResponse.success(HttpStatus.OK,"Accounts fetched successfully", responses)
+        );
     }
 
-    @Override
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<List<CreditAccountResponse>>> getAllAccounts() {
-        return ResponseEntity.ok(accountService.getAllAccounts());
+   
+    /**
+     * Fetch Account By Id
+     * CUSTOMER → only own account
+     * ADMIN → any account
+     *
+     * GET /api/v1/accounts/{accountId}
+     */
+   @Override
+    @PreAuthorize("hasAnyRole('CUSTOMER','ADMIN')")
+    public ResponseEntity<ApiResponse<CreditAccountResponse>> getAccountById(
+            @AuthenticationPrincipal CustomUserPrincipal principal,
+            @PathVariable UUID accountId) {
+
+	   CreditAccountResponse responses =
+               accountService.getAccountById(
+                       principal.getUserId(),
+                       principal.getRole().name(),
+                       accountId
+               );
+
+       return ResponseEntity.ok(
+               ApiResponse.success(HttpStatus.OK,"Account fetched successfully", responses)
+       );
     }
 
-    @Override
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<List<CreditAccountResponse>>> getAccountsByStatus(
-            String status) {
 
-        return ResponseEntity.ok(accountService.getAccountsByStatus(status));
-    }
 
-    @Override
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<CreditAccountResponse>> getAccountById(UUID accountId) {
-        return ResponseEntity.ok(accountService.getAccountById(accountId));
-    }
-
+    /**
+     * Update Account Status
+     * PATCH /api/v1/accounts/{accountId}
+     */
     @Override
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<CreditAccountResponse>> updateAccountStatus(
-            UUID accountId,
-            @Valid CreditAccountStatusUpdateRequest request) {
+            @PathVariable UUID accountId,
+            @Valid @RequestBody CreditAccountStatusUpdateRequest request) {
+
+    	CreditAccountResponse responses =
+                accountService.updateAccountStatus(accountId, request);
 
         return ResponseEntity.ok(
-                accountService.updateAccountStatus(accountId, request));
+                ApiResponse.success(
+                		HttpStatus.OK,
+                        "Account status updated successfully",
+                        responses
+                )
+        );
     }
 }

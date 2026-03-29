@@ -20,64 +20,58 @@ import com.example.service.CardProductService;
 @RestController
 public class CardProductController implements CardProductApi {
 
-    private final CardProductService cardProductService;
+	private final CardProductService cardProductService;
 
-    public CardProductController(CardProductService cardProductService) {
-        this.cardProductService = cardProductService;
-    }
+	public CardProductController(CardProductService cardProductService) {
+		this.cardProductService = cardProductService;
+	}
 
-    @Override
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<CardProductCreateResponse>> create(
-            CardProductCreateRequest request) {
+	@Override
+	@PreAuthorize("hasRole('ADMIN')")
+	public ResponseEntity<ApiResponse<CardProductCreateResponse>> create(CardProductCreateRequest request) {
 
-        ApiResponse<CardProductCreateResponse> response =
-                cardProductService.create(request);
+		CardProductCreateResponse response = cardProductService.create(request);
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
-    }
+		return ResponseEntity.status(HttpStatus.CREATED)
+				.body(ApiResponse.success(HttpStatus.CREATED,"Card product created successfully", response));
+	}
 
-    @Override
-    public ResponseEntity<ApiResponse<List<CardProductResponse>>> getAll() {
-        return ResponseEntity.ok(cardProductService.getAll());
-    }
+	@Override
+	public ResponseEntity<ApiResponse<CardProductResponse>> getById(UUID id) {
+		CardProductResponse response = cardProductService.getById(id);
 
-    @Override
-    public ResponseEntity<ApiResponse<List<CardProductResponse>>> getAllActive() {
-        return ResponseEntity.ok(cardProductService.getAllActive());
-    }
+		return ResponseEntity.ok(ApiResponse.success(HttpStatus.OK,"Card product fetched successfully", response));
+	}
 
-    @Override
-    public ResponseEntity<ApiResponse<CardProductResponse>> getById(UUID id) {
-        return ResponseEntity.ok(cardProductService.getById(id));
-    }
+	@Override
+	@PreAuthorize("hasRole('ADMIN')")
+	public ResponseEntity<ApiResponse<CardProductResponse>> update(UUID id, CardProductUpdateRequest request) {
 
-    @Override
-    public ResponseEntity<ApiResponse<List<CardProductResponse>>> getByCreditProduct(
-            Long creditProductId) {
+		CardProductResponse response = cardProductService.update(id, request);
 
-        return ResponseEntity.ok(
-                cardProductService.getByCreditProduct(creditProductId)
-        );
-    }
+		return ResponseEntity.ok(ApiResponse.success(HttpStatus.OK,"Card product updated successfully", response));
+	}
 
-    @Override
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<CardProductResponse>> update(
-            UUID id,
-            CardProductUpdateRequest request) {
+	@Override
+	@PreAuthorize("hasRole('ADMIN')")
+	public ResponseEntity<ApiResponse<String>> updateStatus(UUID id, ProductStatus status) {
 
-        return ResponseEntity.ok(
-                cardProductService.update(id, request)
-        );
-    }
+		String result = cardProductService.updateStatus(id, status);
 
-    @Override
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<String>> updateStatus(
-            UUID id,
-            ProductStatus status) {
+		String message = status == ProductStatus.ACTIVE 
+				? "Card product activated successfully"
+				: "Card product deactivated successfully";
 
-        return ResponseEntity.ok(cardProductService.updateStatus(id, status));
-    }
+		return ResponseEntity.ok(ApiResponse.success(HttpStatus.OK,message, result));
+	}
+
+	@Override
+	public ResponseEntity<ApiResponse<List<CardProductResponse>>> getAll(ProductStatus status) {
+		 List<CardProductResponse> responses =
+	                cardProductService.getAll(status);
+
+	        return ResponseEntity.ok(
+	                ApiResponse.success(HttpStatus.OK,"Card products fetched successfully", responses)
+	        );
+	}
 }

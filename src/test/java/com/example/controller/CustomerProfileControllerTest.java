@@ -2,9 +2,9 @@ package com.example.controller;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -21,7 +21,6 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.example.dto.request.CustomerProfileUpdateRequest;
-import com.example.dto.response.ApiResponse;
 import com.example.dto.response.CustomerProfileResponse;
 import com.example.enums.UserRole;
 import com.example.security.CustomUserPrincipal;
@@ -70,17 +69,18 @@ class CustomerProfileControllerTest {
                 "India"
         );
 
-        ApiResponse<CustomerProfileResponse> response =
-                new ApiResponse<>(Instant.now(), 200, "Profile fetched successfully", profile);
-
-        Mockito.when(service.getProfile(Mockito.any())).thenReturn(response);
+       
+        Mockito.when(service.getProfile(Mockito.any())).thenReturn(profile);
 
         CustomUserPrincipal principal =
                 new CustomUserPrincipal(userId, null, "test@test.com", UserRole.CUSTOMER);
 
         mockMvc.perform(get("/api/v1/customers/profile")
-                        .requestAttr("principal", principal))
-                .andExpect(status().isOk());
+                .requestAttr("principal", principal))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("Profile fetched successfully"))
+        .andExpect(jsonPath("$.data.firstName").value("Vishal"))
+        .andExpect(jsonPath("$.timestamp").exists());
     }
 
     @Test
@@ -95,13 +95,8 @@ class CustomerProfileControllerTest {
         request.setResidencyStatus("RESIDENT");
         request.setCitizenshipCountry("India");
 
-        ApiResponse<String> response =
-                new ApiResponse<>(Instant.now(), 200,
-                        "Customer profile updated successfully",
-                        "Profile updated");
-
         Mockito.when(service.updateProfile(Mockito.any(), Mockito.any()))
-                .thenReturn(response);
+                .thenReturn("Profile updated");
 
         CustomUserPrincipal principal =
                 new CustomUserPrincipal(userId, null, "test@test.com", UserRole.CUSTOMER);
@@ -110,6 +105,10 @@ class CustomerProfileControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
                         .requestAttr("principal", principal))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message")
+                        .value("Customer profile updated successfully"))
+                .andExpect(jsonPath("$.data").value("Profile updated"))
+                .andExpect(jsonPath("$.timestamp").exists());
     }
 }

@@ -16,14 +16,6 @@ import java.util.UUID;
 @Schema(description = "Request to issue a new credit card")
 public class CreditCardIssuanceRequest {
 
-    @NotNull(message = "Account ID is required")
-    @Schema(
-        description = "Unique identifier of the credit account",
-        example = "e970932d-d757-42b1-8e22-8a6f090dbe46",
-        requiredMode = Schema.RequiredMode.REQUIRED
-    )
-    private UUID accountId;
-
     @NotNull(message = "Card product ID is required")
     @Schema(
         description = "Card product to be issued",

@@ -18,7 +18,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import jakarta.validation.Valid;
 
-@Tag(name = "Authentication", description = "Authentication related APIs")
+@Tag(name = "Authentication")
 public interface AuthApi {
 
     // =========================

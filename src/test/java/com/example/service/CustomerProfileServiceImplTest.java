@@ -1,18 +1,18 @@
 package com.example.service;
 
 import com.example.dto.request.CustomerProfileUpdateRequest;
-import com.example.dto.response.ApiResponse;
 import com.example.dto.response.CustomerProfileResponse;
 import com.example.entity.Customer;
-import com.example.entity.User;
+import com.example.exception.BadRequestException;
 import com.example.exception.ProfileNotCreatedException;
 import com.example.exception.UserNotFoundException;
 import com.example.mapper.CustomerProfileMapper;
 import com.example.repository.CustomerRepository;
-import com.example.repository.UserRepository;
 import com.example.service.ServiceImpl.CustomerProfileServiceImpl;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -22,36 +22,36 @@ import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+/**
+ * Unit tests for {@link CustomerProfileServiceImpl}.
+ */
 @ExtendWith(MockitoExtension.class)
 class CustomerProfileServiceImplTest {
 
-    @Mock
-    private UserRepository userRepository;
-
-    @Mock
-    private CustomerRepository customerRepository;
-    
-    @Spy
-    private CustomerProfileMapper profileMapper = new CustomerProfileMapper();
+    // FIX: UserService replaces UserRepository
+    @Mock  private CustomerService customerService;
+    @Mock  private CustomerRepository customerRepository;
+    // @Spy kept — tests assert on real mapped field values
+    @Spy   private CustomerProfileMapper profileMapper = new CustomerProfileMapper();
 
     @InjectMocks
     private CustomerProfileServiceImpl service;
 
     private UUID userId;
-    private User user;
     private Customer customer;
 
     @BeforeEach
     void setUp() {
-
         userId = UUID.randomUUID();
 
+        // FIX: User object removed — service no longer resolves via User entity;
+        // UserService.getCustomerByUserId() returns Customer directly.
         customer = new Customer();
         customer.setCustomerId(UUID.randomUUID());
         customer.setFirstName("John");
@@ -62,144 +62,154 @@ class CustomerProfileServiceImplTest {
         customer.setPanNumber("ABCDE1234F");
         customer.setResidencyStatus("RESIDENT");
         customer.setCitizenshipCountry("India");
-
-        user = new User();
-        user.setUserId(userId);
-        user.setCustomer(customer);
     }
 
+    // =========================================================================
+    // getProfile
+    // =========================================================================
 
-    // GET PROFILE SUCCESS
-    @Test
-    void shouldGetProfileSuccessfully() {
+    @Nested
+    @DisplayName("Get Profile")
+    class GetProfileTests {
 
-        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        @Test
+        void shouldGetProfileSuccessfully() {
+            // FIX: userRepository.findById() → userService.getCustomerByUserId()
+            // returns Customer directly — no Optional or User unwrap
+            when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
 
-        ApiResponse<CustomerProfileResponse> response = service.getProfile(userId);
+            CustomerProfileResponse response = service.getProfile(userId);
 
-        assertNotNull(response);
-        assertEquals("Profile fetched successfully", response.getMessage());
-        assertEquals("John", response.getData().getFirstName());
-
-        verify(userRepository).findById(userId);
-    }
-
-    // USER NOT FOUND
-    @Test
-    void shouldThrowUserNotFoundException() {
-
-        when(userRepository.findById(userId)).thenReturn(Optional.empty());
-
-        assertThrows(UserNotFoundException.class,
-                () -> service.getProfile(userId));
-    }
-
-
-    // PROFILE NOT CREATED
-    @Test
-    void shouldThrowProfileNotCreatedException() {
-
-        user.setCustomer(null);
-
-        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-
-        assertThrows(ProfileNotCreatedException.class,
-                () -> service.getProfile(userId));
-    }
-
-
-    // UPDATE PROFILE SUCCESS
-    @Test
-    void shouldUpdateProfileSuccessfully() {
-
-        customer.setFirstName("Aman");
-
-        CustomerProfileUpdateRequest request = new CustomerProfileUpdateRequest();
-        request.setFirstName("Amit");
-        request.setLastName("Sharma");
-        request.setCitizenshipCountry("India");
-
-        when(userRepository.findById(userId))
-                .thenReturn(Optional.of(user));
-
-        when(customerRepository.save(any(Customer.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-
-        ApiResponse<String> response =
-                service.updateProfile(userId, request);
-
-        assertNotNull(response);
-        assertEquals("Customer profile updated successfully", response.getMessage());
-
-        // verify update happened
-        assertEquals("Amit", customer.getFirstName());
-        assertEquals("Sharma", customer.getLastName());
-        assertEquals("India", customer.getCitizenshipCountry());
-
-        verify(userRepository).findById(userId);
-        verify(customerRepository).save(customer);
-    }
-
-    // UPDATE PROFILE USER NOT FOUND
-    @Test
-    void shouldThrowUserNotFoundWhenUpdating() {
-
-        CustomerProfileUpdateRequest request = new CustomerProfileUpdateRequest();
-        request.setFirstName("Amit"); 
-
-        when(userRepository.findById(userId)).thenReturn(Optional.empty());
-
-        assertThrows(UserNotFoundException.class,
-                () -> service.updateProfile(userId, request));
-    }
-
-    // UPDATE PROFILE NOT CREATED
-
-    @Test
-    void shouldThrowProfileNotCreatedWhenUpdating() {
-
-        CustomerProfileUpdateRequest request = new CustomerProfileUpdateRequest();
-        request.setFirstName("Amit"); 
-
-        user.setCustomer(null);
-
-        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-
-        assertThrows(ProfileNotCreatedException.class,
-                () -> service.updateProfile(userId, request));
-    }
+            assertNotNull(response);
     
-    @Test
-    void shouldThrowExceptionWhenUpdateRequestIsEmpty() {
+            // Real @Spy mapper maps firstName from the customer entity
+            assertEquals("John", response.getFirstName());
 
-        CustomerProfileUpdateRequest request = new CustomerProfileUpdateRequest();
+            verify(customerService).getCustomerByUserId(userId);
+        }
 
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> service.updateProfile(userId, request)
-        );
+        @Test
+        void shouldThrowUserNotFoundExceptionOnGetProfile() {
+            // FIX: UserService.getCustomerByUserId throws directly — no Optional.empty()
+            when(customerService.getCustomerByUserId(userId))
+                    .thenThrow(new UserNotFoundException("User not found"));
 
-        assertEquals("At least one field must be provided for update", exception.getMessage());
+            assertThrows(UserNotFoundException.class,
+                    () -> service.getProfile(userId));
+        }
 
-        // Ensure DB was never called
-        verify(userRepository, never()).findById(any());
-        verify(customerRepository, never()).save(any());
+        @Test
+        void shouldThrowProfileNotCreatedExceptionOnGetProfile() {
+            // FIX: UserService throws ProfileNotCreatedException when customer is null.
+            // The old 'user.setCustomer(null)' setup is no longer needed — UserService
+            // handles that guard internally.
+            when(customerService.getCustomerByUserId(userId))
+                    .thenThrow(new ProfileNotCreatedException("Profile not created"));
+
+            assertThrows(ProfileNotCreatedException.class,
+                    () -> service.getProfile(userId));
+        }
     }
-    
-    @Test
-    void shouldUpdateDobAndResidencyStatus() {
 
-        CustomerProfileUpdateRequest request = new CustomerProfileUpdateRequest();
-        request.setDateOfBirth(LocalDate.of(1990,1,1));
-        request.setResidencyStatus("RESIDENT");
+    // =========================================================================
+    // updateProfile
+    // =========================================================================
 
-        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-        when(customerRepository.save(any())).thenReturn(customer);
+    @Nested
+    @DisplayName("Update Profile")
+    class UpdateProfileTests {
 
-        ApiResponse<String> response = service.updateProfile(userId, request);
+        @Test
+        void shouldUpdateProfileSuccessfully() {
+            CustomerProfileUpdateRequest request = new CustomerProfileUpdateRequest();
+            request.setFirstName("Amit");
+            request.setLastName("Sharma");
+            request.setCitizenshipCountry("India");
 
-        assertEquals("Customer profile updated successfully", response.getMessage());
+            // FIX: userRepository.findById() → userService.getCustomerByUserId()
+            when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
+            when(customerRepository.save(any(Customer.class)))
+                    .thenAnswer(invocation -> invocation.getArgument(0));
 
-        verify(customerRepository).save(customer);
+            String response = service.updateProfile(userId, request);
+
+            assertEquals("Profile updated", response);
+
+            // @Spy mapper mutates the same customer object — field assertions work directly
+            assertEquals("Amit", customer.getFirstName());
+            assertEquals("Sharma", customer.getLastName());
+            assertEquals("India", customer.getCitizenshipCountry());
+
+            verify(customerService).getCustomerByUserId(userId);
+            verify(customerRepository).save(customer);
+        }
+
+        @Test
+        void shouldUpdateDobAndResidencyStatus() {
+            CustomerProfileUpdateRequest request = new CustomerProfileUpdateRequest();
+            request.setDateOfBirth(LocalDate.of(1990, 1, 1));
+            request.setResidencyStatus("NON_RESIDENT");
+
+            when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
+            when(customerRepository.save(any())).thenReturn(customer);
+
+            String response = service.updateProfile(userId, request);
+
+            assertEquals("Profile updated", response);
+            assertEquals(LocalDate.of(1990, 1, 1), customer.getDateOfBirth());
+            assertEquals("NON_RESIDENT", customer.getResidencyStatus());
+
+            verify(customerRepository).save(customer);
+        }
+
+        @Test
+        void shouldThrowBadRequestExceptionWhenUpdateRequestIsEmpty() {
+            // FIX: refactored impl throws BadRequestException, NOT IllegalArgumentException.
+            // validateAtLeastOneFieldProvided() fires BEFORE userService is called,
+            // so userService must never be touched.
+            CustomerProfileUpdateRequest request = new CustomerProfileUpdateRequest();
+
+            BadRequestException exception = assertThrows(
+                    BadRequestException.class,
+                    () -> service.updateProfile(userId, request)
+            );
+
+            assertEquals("At least one field must be provided for update", exception.getMessage());
+
+            // FIX: userRepository → userService; both must never be called
+            verify(customerService, never()).getCustomerByUserId(any());
+            verify(customerRepository, never()).save(any());
+        }
+
+        @Test
+        void shouldThrowUserNotFoundWhenUpdating() {
+            CustomerProfileUpdateRequest request = new CustomerProfileUpdateRequest();
+            request.setFirstName("Amit");
+
+            // FIX: validation passes (firstName provided), then userService throws
+            when(customerService.getCustomerByUserId(userId))
+                    .thenThrow(new UserNotFoundException("User not found"));
+
+            assertThrows(UserNotFoundException.class,
+                    () -> service.updateProfile(userId, request));
+
+            verify(customerRepository, never()).save(any());
+        }
+
+        @Test
+        void shouldThrowProfileNotCreatedWhenUpdating() {
+            CustomerProfileUpdateRequest request = new CustomerProfileUpdateRequest();
+            request.setFirstName("Amit");
+
+            // FIX: UserService throws ProfileNotCreatedException when customer is null.
+            // 'user.setCustomer(null)' setup no longer needed.
+            when(customerService.getCustomerByUserId(userId))
+                    .thenThrow(new ProfileNotCreatedException("Profile not created"));
+
+            assertThrows(ProfileNotCreatedException.class,
+                    () -> service.updateProfile(userId, request));
+
+            verify(customerRepository, never()).save(any());
+        }
     }
 }

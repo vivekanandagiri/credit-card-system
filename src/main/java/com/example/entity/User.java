@@ -4,7 +4,7 @@ import com.example.enums.UserRole;
 import jakarta.persistence.*;
 import lombok.*;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 import org.hibernate.annotations.JdbcType;
@@ -49,7 +49,7 @@ public class User extends BaseEntity {
     @Column(nullable = false)
     private int failedAttempts = 0;
 
-    private LocalDateTime lastLoginAt;
+    private Instant lastLoginAt;
 
     public UUID getCustomerId() {
         return customer != null ? customer.getCustomerId() : null;

@@ -23,18 +23,23 @@ public class AuthController implements AuthApi {
     }
 
     @Override
-    public ResponseEntity<ApiResponse<RegisterResponse>> register(RegisterRequest request) {
+    public ResponseEntity<ApiResponse<RegisterResponse>> register(
+            @RequestBody RegisterRequest request) {
 
-        ApiResponse<RegisterResponse> response = authService.register(request);
+        RegisterResponse result = authService.register(request);
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(HttpStatus.CREATED,"User registered successfully", result));
     }
 
     @Override
-    public ResponseEntity<ApiResponse<LoginResponse>> login(LoginRequest request) {
+    public ResponseEntity<ApiResponse<LoginResponse>> login(
+            @RequestBody LoginRequest request) {
 
-        ApiResponse<LoginResponse> response = authService.login(request);
+        LoginResponse result = authService.login(request);
 
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(
+                ApiResponse.success(HttpStatus.OK,"Login successful", result)
+        );
     }
 }

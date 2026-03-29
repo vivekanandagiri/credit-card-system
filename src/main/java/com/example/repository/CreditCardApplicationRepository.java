@@ -37,4 +37,7 @@ public interface CreditCardApplicationRepository
             UUID customerId,
             List<ApplicationStatus> statuses
     );
+
+    List<CreditCardApplication> findAllByCustomerCustomerIdAndApplicationStatus(
+            UUID customerId, ApplicationStatus status);
 }

@@ -25,7 +25,6 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.example.dto.request.AddressCreateRequest;
 import com.example.dto.response.AddressResponse;
-import com.example.dto.response.ApiResponse;
 import com.example.security.JwtFilter;
 import com.example.service.CustomerAddressService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -71,17 +70,14 @@ class CustomerAddressControllerTest {
                     true
             );
 
-            ApiResponse<String> response =
-                    ApiResponse.success(201, "Address added successfully", "Address created");
 
             when(service.addAddress(any(), any(AddressCreateRequest.class)))
-                    .thenReturn(response);
+                    .thenReturn("Address created");
 
             mockMvc.perform(post("/api/v1/customers/addresses")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isCreated())
-                    .andExpect(jsonPath("$.status").value(201))
                     .andExpect(jsonPath("$.message").value("Address added successfully"))
                     .andExpect(jsonPath("$.data").value("Address created"))
                     .andExpect(jsonPath("$.timestamp").exists());
@@ -129,6 +125,19 @@ class CustomerAddressControllerTest {
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isBadRequest());
         }
+        @Test
+        void add_address_validation_failure() throws Exception {
+
+            AddressCreateRequest request = new AddressCreateRequest(
+                    "", "", "Near Metro", "Bangalore",
+                    "Karnataka", "123", "India", false
+            );
+
+            mockMvc.perform(post("/api/v1/customers/addresses")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isBadRequest());
+        }
     }
 
 
@@ -152,15 +161,12 @@ class CustomerAddressControllerTest {
                             "India"
                     );
 
-            ApiResponse<List<AddressResponse>> response =
-                    ApiResponse.success(200, "Addresses fetched successfully", List.of(address));
-
+            
             when(service.getAddresses(any()))
-                    .thenReturn(response);
+                    .thenReturn(List.of(address));
 
             mockMvc.perform(get("/api/v1/customers/addresses"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.status").value(200))
                     .andExpect(jsonPath("$.message").value("Addresses fetched successfully"))
                     .andExpect(jsonPath("$.data[0].addressId").value(addressId.toString()))
                     .andExpect(jsonPath("$.data[0].city").value("Bangalore"))
@@ -181,20 +187,18 @@ class CustomerAddressControllerTest {
 
             UUID addressId = UUID.randomUUID();
 
-            ApiResponse<String> response =
-                    ApiResponse.success(200, "Address deleted successfully", "Deleted");
-
-            when(service.deleteAddress(addressId))
-                    .thenReturn(response);
+            when(service.deleteAddress(any(), eq(addressId)))
+                    .thenReturn("Address Deleted");
 
             mockMvc.perform(delete("/api/v1/customers/addresses/{id}", addressId))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.status").value(200))
-                    .andExpect(jsonPath("$.message").value("Address deleted successfully"))
-                    .andExpect(jsonPath("$.data").value("Deleted"))
+                    .andExpect(jsonPath("$.message")
+                            .value("Address deleted successfully"))
+                    .andExpect(jsonPath("$.data").value("Address Deleted"))
                     .andExpect(jsonPath("$.timestamp").exists());
 
-            verify(service, times(1)).deleteAddress(addressId);
+            verify(service, times(1))
+                    .deleteAddress(any(), eq(addressId));
         }
     }
 }

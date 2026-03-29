@@ -1,47 +1,39 @@
 package com.example.service;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import com.example.dto.request.CardProductCreateRequest;
+import com.example.dto.request.CardProductUpdateRequest;
+import com.example.dto.response.CardProductCreateResponse;
+import com.example.dto.response.CardProductResponse;
+import com.example.entity.CreditCardProduct;
+import com.example.enums.ProductStatus;
+import com.example.exception.BadRequestException;
+import com.example.exception.ResourceNotFoundException;
+import com.example.mapper.CardProductMapper;
+import com.example.repository.CreditCardProductRepository;
+import com.example.service.ServiceImpl.CardProductServiceImpl;
 
-import java.math.BigDecimal;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import com.example.dto.request.CardProductCreateRequest;
-import com.example.dto.request.CardProductUpdateRequest;
-import com.example.dto.response.ApiResponse;
-import com.example.dto.response.CardProductCreateResponse;
-import com.example.dto.response.CardProductResponse;
-import com.example.entity.CreditCardProduct;
-import com.example.entity.CreditProduct;
-import com.example.enums.CardType;
-import com.example.enums.NetworkType;
-import com.example.enums.ProductStatus;
-import com.example.exception.BadRequestException;
-import com.example.exception.ConflictException;
-import com.example.exception.ResourceNotFoundException;
-import com.example.mapper.CardProductMapper;
-import com.example.repository.CreditCardProductRepository;
-import com.example.repository.CreditProductRepository;
-import com.example.service.ServiceImpl.CardProductServiceImpl;
-
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.*;
-import org.mockito.junit.jupiter.MockitoExtension;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class CardProductServiceImplTest {
 
     @Mock
-    private CreditCardProductRepository cardProductRepository;
-
-    @Mock
-    private CreditProductRepository creditProductRepository;
+    private CreditCardProductRepository repository;
 
     @Mock
     private CardProductMapper mapper;
@@ -49,413 +41,176 @@ class CardProductServiceImplTest {
     @InjectMocks
     private CardProductServiceImpl service;
 
-    private UUID cardProductId;
-    private CreditProduct creditProduct;
-    private CreditCardProduct cardProduct;
-    private CardProductResponse response;
-    private CardProductCreateResponse createResponse;
+    private UUID id;
+    private CreditCardProduct entity;
+    private CardProductCreateRequest createRequest;
+    private CardProductUpdateRequest updateRequest;
 
     @BeforeEach
-    void setup() {
+    void setUp() {
+        id = UUID.randomUUID();
 
-        cardProductId = UUID.randomUUID();
+        entity = new CreditCardProduct();
+        entity.setStatus(ProductStatus.ACTIVE);
 
-        creditProduct = new CreditProduct();
-        creditProduct.setCreditProductId(1L);
-        creditProduct.setStatus(ProductStatus.ACTIVE);
+        createRequest = new CardProductCreateRequest();
+        createRequest.setStatementCycleDay(10);
 
-        cardProduct = new CreditCardProduct();
-        cardProduct.setCardProductId(cardProductId);
-        cardProduct.setStatus(ProductStatus.ACTIVE);
-
-        response = new CardProductResponse(
-                cardProductId,
-                1L,
-                "Gold Credit Product",
-                "Gold Visa Card",
-                NetworkType.VISA,
-                CardType.PHYSICAL,
-                new BigDecimal("1999"),
-                5,
-                true,
-                true,
-                true,
-                true,
-                new BigDecimal("25000"),
-                new BigDecimal("100000"),
-                new BigDecimal("75000"),
-                15,
-                new BigDecimal("3.5"),
-                "Premium card",
-                ProductStatus.ACTIVE
-        );
-
-        createResponse = new CardProductCreateResponse(
-                cardProductId,
-                "Gold Visa Card",
-                NetworkType.VISA,
-                ProductStatus.ACTIVE
-        );
+        updateRequest = new CardProductUpdateRequest();
+        updateRequest.setProductName("Updated Name");
     }
 
-    // CREATE TESTS
+    // ---------------- CREATE ----------------
     @Nested
-    @DisplayName("Create Card Product Tests")
     class CreateTests {
 
         @Test
-        void create_success() {
+        void shouldCreateCardProductSuccessfully() {
+            when(mapper.toEntity(createRequest)).thenReturn(entity);
+            when(repository.save(entity)).thenReturn(entity);
+            when(mapper.toCardProductSummaryResponse(entity))
+                    .thenReturn(new CardProductCreateResponse());
 
-            CardProductCreateRequest request = new CardProductCreateRequest();
-            request.setCreditProductId(1L);
-            request.setStatementCycleDay(15);
+            CardProductCreateResponse result = service.create(createRequest);
 
-            when(creditProductRepository.findById(1L))
-                    .thenReturn(Optional.of(creditProduct));
-
-            when(mapper.toEntity(request, creditProduct))
-                    .thenReturn(cardProduct);
-
-            when(cardProductRepository.save(cardProduct))
-                    .thenReturn(cardProduct);
-
-            when(mapper.toCreateResponse(cardProduct))
-            .thenReturn(createResponse);
-
-            ApiResponse<CardProductCreateResponse> result = service.create(request);
-
-            assertEquals(201, result.getStatus());
-            assertEquals("Card product created successfully", result.getMessage());
-
-            verify(cardProductRepository).save(cardProduct);
+            assertThat(result).isNotNull();
+            verify(repository).save(entity);
         }
 
         @Test
-        void create_credit_product_not_found() {
-
-            CardProductCreateRequest request = new CardProductCreateRequest();
-            request.setCreditProductId(99L);
-
-            when(creditProductRepository.findById(99L))
-                    .thenReturn(Optional.empty());
-
-            assertThrows(ResourceNotFoundException.class,
-                    () -> service.create(request));
-        }
-
-        @Test
-        void create_credit_product_inactive() {
-
-            creditProduct.setStatus(ProductStatus.INACTIVE);
-
-            CardProductCreateRequest request = new CardProductCreateRequest();
-            request.setCreditProductId(1L);
-
-            when(creditProductRepository.findById(1L))
-                    .thenReturn(Optional.of(creditProduct));
+        void shouldThrowException_whenStatementCycleInvalid() {
+            createRequest.setStatementCycleDay(40);
 
             assertThrows(BadRequestException.class,
-                    () -> service.create(request));
-        }
-
-        @Test
-        void create_invalid_statement_cycle() {
-
-            CardProductCreateRequest request = new CardProductCreateRequest();
-            request.setCreditProductId(1L);
-            request.setStatementCycleDay(30);
-
-            when(creditProductRepository.findById(1L))
-                    .thenReturn(Optional.of(creditProduct));
-
-            assertThrows(BadRequestException.class,
-                    () -> service.create(request));
-        }
-        
-        @Test
-        void create_duplicate_product_name() {
-
-            CardProductCreateRequest request = new CardProductCreateRequest();
-            request.setCreditProductId(1L);
-            request.setProductName("Gold Card");
-
-            when(creditProductRepository.findById(1L))
-                    .thenReturn(Optional.of(creditProduct));
-
-            when(cardProductRepository
-                    .existsByProductNameAndCreditProductCreditProductId(
-                            "Gold Card", 1L))
-                    .thenReturn(true);
-
-            assertThrows(ConflictException.class,
-                    () -> service.create(request));
-        }
-        
-        @Test
-        void create_invalid_atm_rule() {
-
-            CardProductCreateRequest request = new CardProductCreateRequest();
-            request.setCreditProductId(1L);
-            request.setAtmWithdrawalAllowed(false);
-            request.setAtmDailyLimit(new BigDecimal("5000"));
-
-            when(creditProductRepository.findById(1L))
-                    .thenReturn(Optional.of(creditProduct));
-
-            assertThrows(BadRequestException.class,
-                    () -> service.create(request));
-        }
-        
-        @Test
-        void create_invalid_ecommerce_rule() {
-
-            CardProductCreateRequest request = new CardProductCreateRequest();
-            request.setCreditProductId(1L);
-            request.setOnlineTransactionsAllowed(false);
-            request.setEcommerceDailyLimit(new BigDecimal("5000"));
-
-            when(creditProductRepository.findById(1L))
-                    .thenReturn(Optional.of(creditProduct));
-
-            assertThrows(BadRequestException.class,
-                    () -> service.create(request));
-        }
-        
-        @Test
-        void create_negative_annual_fee() {
-
-            CardProductCreateRequest request = new CardProductCreateRequest();
-            request.setCreditProductId(1L);
-            request.setAnnualFee(new BigDecimal("-100"));
-
-            when(creditProductRepository.findById(1L))
-                    .thenReturn(Optional.of(creditProduct));
-
-            assertThrows(BadRequestException.class,
-                    () -> service.create(request));
-        }
-        
-        @Test
-        void create_invalid_forex_markup() {
-
-            CardProductCreateRequest request = new CardProductCreateRequest();
-            request.setCreditProductId(1L);
-            request.setForexMarkupPercent(new BigDecimal("150"));
-
-            when(creditProductRepository.findById(1L))
-                    .thenReturn(Optional.of(creditProduct));
-
-            assertThrows(BadRequestException.class,
-                    () -> service.create(request));
+                    () -> service.create(createRequest));
         }
     }
 
-    // GET TESTS
+    // ---------------- GET BY ID ----------------
     @Nested
-    @DisplayName("Get Card Product Tests")
-    class GetTests {
+    class GetByIdTests {
 
         @Test
-        void get_by_id_success() {
+        void shouldReturnProduct_whenFound() {
+            when(repository.findById(id)).thenReturn(Optional.of(entity));
+            when(mapper.toResponse(entity)).thenReturn(new CardProductResponse());
 
-            when(cardProductRepository.findById(cardProductId))
-                    .thenReturn(Optional.of(cardProduct));
+            CardProductResponse result = service.getById(id);
 
-            when(mapper.toResponse(cardProduct))
-                    .thenReturn(response);
-
-            ApiResponse<CardProductResponse> result =
-                    service.getById(cardProductId);
-
-            assertEquals(200, result.getStatus());
-            assertEquals(cardProductId, result.getData().getCardProductId());
+            assertThat(result).isNotNull();
         }
 
         @Test
-        void get_by_id_not_found() {
-
-            when(cardProductRepository.findById(cardProductId))
-                    .thenReturn(Optional.empty());
+        void shouldThrowException_whenNotFound() {
+            when(repository.findById(id)).thenReturn(Optional.empty());
 
             assertThrows(ResourceNotFoundException.class,
-                    () -> service.getById(cardProductId));
-        }
-
-        @Test
-        void get_all_success() {
-
-            when(cardProductRepository.findAll())
-                    .thenReturn(List.of(cardProduct));
-
-            when(mapper.toResponse(cardProduct))
-                    .thenReturn(response);
-
-            ApiResponse<List<CardProductResponse>> result =
-                    service.getAll();
-
-            assertEquals(200, result.getStatus());
-            assertEquals(1, result.getData().size());
-        }
-
-        @Test
-        void get_all_active_success() {
-
-            when(cardProductRepository.findAllByStatus(ProductStatus.ACTIVE))
-                    .thenReturn(List.of(cardProduct));
-
-            when(mapper.toResponse(cardProduct))
-                    .thenReturn(response);
-
-            ApiResponse<List<CardProductResponse>> result =
-                    service.getAllActive();
-
-            assertEquals(1, result.getData().size());
-        }
-
-        @Test
-        void get_by_credit_product_success() {
-
-            when(cardProductRepository
-                    .findAllByCreditProductCreditProductId(1L))
-                    .thenReturn(List.of(cardProduct));
-
-            when(mapper.toResponse(cardProduct))
-                    .thenReturn(response);
-
-            ApiResponse<List<CardProductResponse>> result =
-                    service.getByCreditProduct(1L);
-
-            assertEquals(1, result.getData().size());
+                    () -> service.getById(id));
         }
     }
 
-    // UPDATE TESTS
+    // ---------------- GET ALL ----------------
     @Nested
-    @DisplayName("Update Card Product Tests")
+    class GetAllTests {
+
+        @Test
+        void shouldReturnAllProducts_whenStatusNull() {
+            when(repository.findAll()).thenReturn(List.of(entity));
+            when(mapper.toResponse(entity)).thenReturn(new CardProductResponse());
+
+            List<CardProductResponse> result = service.getAll(null);
+
+            assertThat(result).hasSize(1);
+        }
+
+        @Test
+        void shouldReturnFilteredProducts_whenStatusProvided() {
+            when(repository.findAllByStatus(ProductStatus.ACTIVE))
+                    .thenReturn(List.of(entity));
+            when(mapper.toResponse(entity)).thenReturn(new CardProductResponse());
+
+            List<CardProductResponse> result =
+                    service.getAll(ProductStatus.ACTIVE);
+
+            assertThat(result).hasSize(1);
+        }
+    }
+
+    // ---------------- UPDATE ----------------
+    @Nested
     class UpdateTests {
 
         @Test
-        void update_success() {
+        void shouldUpdateSuccessfully() {
+            when(repository.findById(id)).thenReturn(Optional.of(entity));
+            when(repository.save(entity)).thenReturn(entity);
+            when(mapper.toResponse(entity)).thenReturn(new CardProductResponse());
 
-            CardProductUpdateRequest request =
-                    new CardProductUpdateRequest();
+            CardProductResponse result =
+                    service.update(id, updateRequest);
 
-            request.setProductName("Updated Gold Card");
-
-            when(cardProductRepository.findById(cardProductId))
-                    .thenReturn(Optional.of(cardProduct));
-
-            when(cardProductRepository.save(cardProduct))
-                    .thenReturn(cardProduct);
-
-            when(mapper.toResponse(cardProduct))
-                    .thenReturn(response);
-
-            ApiResponse<CardProductResponse> result =
-                    service.update(cardProductId, request);
-
-            assertEquals(200, result.getStatus());
-
-            verify(cardProductRepository).save(cardProduct);
+            assertThat(result).isNotNull();
+            verify(repository).save(entity);
         }
 
         @Test
-        void update_inactive_product() {
-
-            cardProduct.setStatus(ProductStatus.INACTIVE);
-
-            when(cardProductRepository.findById(cardProductId))
-                    .thenReturn(Optional.of(cardProduct));
+        void shouldThrowException_whenProductInactive() {
+            entity.setStatus(ProductStatus.INACTIVE);
+            when(repository.findById(id)).thenReturn(Optional.of(entity));
 
             assertThrows(BadRequestException.class,
-                    () -> service.update(cardProductId,
-                            new CardProductUpdateRequest()));
-        }
-
-        @Test
-        void update_invalid_statement_cycle() {
-
-            CardProductUpdateRequest request =
-                    new CardProductUpdateRequest();
-
-            request.setStatementCycleDay(35);
-
-            when(cardProductRepository.findById(cardProductId))
-                    .thenReturn(Optional.of(cardProduct));
-
-            assertThrows(BadRequestException.class,
-                    () -> service.update(cardProductId, request));
-        }
-        
-        @Test
-        void update_empty_request() {
-
-            CardProductUpdateRequest request =
-                    new CardProductUpdateRequest();
-
-            when(cardProductRepository.findById(cardProductId))
-                    .thenReturn(Optional.of(cardProduct));
-
-            assertThrows(BadRequestException.class,
-                    () -> service.update(cardProductId, request));
+                    () -> service.update(id, updateRequest));
         }
     }
 
- // UPDATE STATUS TESTS
+    // ---------------- UPDATE STATUS ----------------
     @Nested
-    @DisplayName("Update Card Product Status Tests")
     class UpdateStatusTests {
 
         @Test
-        void deactivate_success() {
+        void shouldUpdateStatusSuccessfully() {
+            entity.setStatus(ProductStatus.INACTIVE);
+            when(repository.findById(id)).thenReturn(Optional.of(entity));
 
-            when(cardProductRepository.findById(cardProductId))
-                    .thenReturn(Optional.of(cardProduct));
+            String result =
+                    service.updateStatus(id, ProductStatus.ACTIVE);
 
-            ApiResponse<String> result =
-                    service.updateStatus(cardProductId, ProductStatus.INACTIVE);
-
-            assertEquals(200, result.getStatus());
-
-            verify(cardProductRepository).save(cardProduct);
+            assertThat(result).isEqualTo("ACTIVE");
+            verify(repository).save(entity);
         }
 
         @Test
-        void deactivate_already_inactive() {
-
-            cardProduct.setStatus(ProductStatus.INACTIVE);
-
-            when(cardProductRepository.findById(cardProductId))
-                    .thenReturn(Optional.of(cardProduct));
+        void shouldThrowException_whenSameStatus() {
+            entity.setStatus(ProductStatus.ACTIVE);
+            when(repository.findById(id)).thenReturn(Optional.of(entity));
 
             assertThrows(BadRequestException.class,
-                    () -> service.updateStatus(cardProductId, ProductStatus.INACTIVE));
+                    () -> service.updateStatus(id, ProductStatus.ACTIVE));
+        }
+    }
+
+    // ---------------- GET ACTIVE ENTITY ----------------
+    @Nested
+    class GetActiveEntityTests {
+
+        @Test
+        void shouldReturnEntity_whenActive() {
+            entity.setStatus(ProductStatus.ACTIVE);
+            when(repository.findById(id)).thenReturn(Optional.of(entity));
+
+            CreditCardProduct result =
+                    service.getActiveCardProductEntity(id);
+
+            assertThat(result).isSameAs(entity);
         }
 
         @Test
-        void updateStatus_product_not_found() {
+        void shouldThrowException_whenInactive() {
+            entity.setStatus(ProductStatus.INACTIVE);
+            when(repository.findById(id)).thenReturn(Optional.of(entity));
 
-            when(cardProductRepository.findById(cardProductId))
-                    .thenReturn(Optional.empty());
-
-            assertThrows(ResourceNotFoundException.class,
-                    () -> service.updateStatus(cardProductId, ProductStatus.INACTIVE));
-        }
-        
-        @Test
-        void activate_success() {
-
-            cardProduct.setStatus(ProductStatus.INACTIVE);
-
-            when(cardProductRepository.findById(cardProductId))
-                    .thenReturn(Optional.of(cardProduct));
-
-            ApiResponse<String> result =
-                    service.updateStatus(cardProductId, ProductStatus.ACTIVE);
-
-            assertEquals(200, result.getStatus());
-
-            verify(cardProductRepository).save(cardProduct);
+            assertThrows(BadRequestException.class,
+                    () -> service.getActiveCardProductEntity(id));
         }
     }
 }

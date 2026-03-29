@@ -9,7 +9,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.example.dto.request.KycVerifyRequest;
+import com.example.dto.request.KycStatusUpdateRequest;
 import com.example.dto.response.ApiResponse;
 import com.example.dto.response.KycResponse;
 import com.example.enums.KycStatus;
@@ -23,7 +23,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import jakarta.validation.Valid;
 
-@Tag(name = "KYC Management", description = "KYC submission and verification APIs")
+@Tag(name = "KYC Management")
 @RequestMapping("/api/v1/kyc")
 public interface KycApi {
 
@@ -70,7 +70,7 @@ public interface KycApi {
                     description = "Unauthorized"
             )
     })
-    @GetMapping("/status")
+    @GetMapping
     ResponseEntity<ApiResponse<KycResponse>> getStatus(
             @AuthenticationPrincipal CustomUserPrincipal principal,
             KycStatus status
@@ -94,7 +94,7 @@ public interface KycApi {
     ResponseEntity<ApiResponse<String>> verify(
             @PathVariable UUID kycId,
             @AuthenticationPrincipal CustomUserPrincipal principal,
-            @Valid @RequestBody KycVerifyRequest request
+            @Valid @RequestBody KycStatusUpdateRequest request
     );
 
     // =====================================================

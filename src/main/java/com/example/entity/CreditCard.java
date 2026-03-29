@@ -35,10 +35,6 @@ public class CreditCard extends BaseEntity {
     @JoinColumn(name = "card_product_id", nullable = false)
     private CreditCardProduct cardProduct;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "customer_id", nullable = false)
-    private Customer customer;
-
     // Card format: VIRTUAL or PHYSICAL — decided at issuance 
     @Enumerated(EnumType.STRING)
     @JdbcType(PostgreSQLEnumJdbcType.class)
@@ -66,6 +62,16 @@ public class CreditCard extends BaseEntity {
 
     @Column(name = "expiry_year", nullable = false)
     private Integer expiryYear;
+    
+    //Features
+    @Column(name = "online_enabled", nullable = false)
+    private Boolean onlineEnabled = true;
+
+    @Column(name = "atm_enabled", nullable = false)
+    private Boolean atmEnabled = true;
+
+    @Column(name = "international_enabled", nullable = false)
+    private Boolean internationalEnabled = false;
 
     // Life cycle timestamps
     @Column(name = "issued_at", nullable = false)

@@ -2,7 +2,13 @@ package com.example.repository;
 
 import com.example.entity.CreditAccount;
 import com.example.enums.AccountStatus;
+
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.QueryHint;
+
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.QueryHints;
 
 import java.util.List;
 import java.util.Optional;
@@ -28,4 +34,11 @@ public interface CreditAccountRepository extends JpaRepository<CreditAccount, UU
 
     // Admin — filter by status
     List<CreditAccount> findAllByAccountStatus(AccountStatus status);
+    
+    //Pessimistic Locking Method
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @QueryHints({
+        @QueryHint(name = "jakarta.persistence.lock.timeout", value = "3000") // 3 sec timeout
+    })
+    Optional<CreditAccount> findByAccountId(UUID accountId);
 }

@@ -7,32 +7,38 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.example.dto.request.CreditAccountStatusUpdateRequest;
-import com.example.dto.response.ApiResponse;
 import com.example.dto.response.CreditAccountResponse;
 import com.example.entity.CreditAccount;
 import com.example.entity.CreditCardApplication;
 import com.example.entity.Customer;
-import com.example.entity.User;
 import com.example.enums.AccountStatus;
 import com.example.enums.ApplicationStatus;
 import com.example.exception.BusinessRuleException;
 import com.example.exception.ConflictException;
-import com.example.exception.ProfileNotCreatedException;
 import com.example.exception.ResourceNotFoundException;
-import com.example.exception.UserNotFoundException;
 import com.example.mapper.CreditAccountMapper;
 import com.example.repository.CreditAccountRepository;
-import com.example.repository.UserRepository;
 import com.example.service.CreditAccountService;
+import com.example.service.CustomerService;
 import com.example.util.AccountNumberGenerator;
 
-import jakarta.transaction.Transactional;
 
+/**
+ * Implementation of {@link CreditAccountService}.
+ *
+ * <p>Valid status transitions:
+ * <ul>
+ *   <li>ACTIVE → SUSPENDED, BLOCKED, CLOSED</li>
+ *   <li>SUSPENDED → ACTIVE, BLOCKED, CLOSED</li>
+ *   <li>BLOCKED → ACTIVE, CLOSED</li>
+ *   <li>CLOSED → (terminal)</li>
+ * </ul>
+ */
 @Service
 @Transactional
 public class CreditAccountServiceImpl implements CreditAccountService {
@@ -42,23 +48,25 @@ public class CreditAccountServiceImpl implements CreditAccountService {
 	
 	private static final int DEFAULT_STATEMENT_CYCLE_DAY = 5;
 	
-	private final CreditAccountRepository accountRepository;
-	private final AccountNumberGenerator accountNumberGenerator;
-	private final CreditAccountMapper accountMapper;
-	private final UserRepository userRepository;
-	
-	
+	private final CreditAccountRepository accountRepository; 
+    private final AccountNumberGenerator accountNumberGenerator;
+    private final CreditAccountMapper accountMapper;
+    private final CustomerService customerService;                   
+ 
+    public CreditAccountServiceImpl(
+            CreditAccountRepository accountRepository,
+            AccountNumberGenerator accountNumberGenerator,
+            CreditAccountMapper accountMapper,
+            CustomerService customerService) {
+        this.accountRepository = accountRepository;
+        this.accountNumberGenerator = accountNumberGenerator;
+        this.accountMapper = accountMapper;
+        this.customerService = customerService;
+    }
 
-	public CreditAccountServiceImpl(CreditAccountRepository accountRepository,
-			AccountNumberGenerator accountNumberGenerator, CreditAccountMapper accountMapper,
-			UserRepository userRepository) {
-		this.accountRepository = accountRepository;
-		this.accountNumberGenerator = accountNumberGenerator;
-		this.accountMapper = accountMapper;
-		this.userRepository = userRepository;
-	}
-
-	//Auto Credit Account Creation after application approval
+	/**
+	 * Auto Credit Account Creation after application approval
+	 */
 	@Transactional
 	@Override
 	public CreditAccountResponse createAccount(CreditCardApplication application) {
@@ -75,121 +83,93 @@ public class CreditAccountServiceImpl implements CreditAccountService {
 			throw new ConflictException("Account already exist for this application"+application.getApplicationId());
 		}
 		
+		
 		//account number generation
 		String accountNumber = accountNumberGenerator.generate(
                 application.getCreditProduct().getProductCode());
 		
-		//Build Account entity
-		CreditAccount account = new CreditAccount();
-		account.setAccountNumber(accountNumber);
-		account.setCustomer(application.getCustomer());
-		account.setApplication(application);
-		account.setCreditProduct(application.getCreditProduct());
-		account.setAccountStatus(AccountStatus.ACTIVE);
+		if (application.getApprovedCreditLimit() == null 
+		        || application.getApprovedCreditLimit().compareTo(BigDecimal.ZERO) <= 0) {
+		    throw new BusinessRuleException("Invalid credit limit");
+		}
 		
-		//Credit terms -from application
-		account.setCreditLimit(application.getApprovedCreditLimit());
-		account.setApr(application.getApprovedApr());
-		
-		account.setCurrentBalance(BigDecimal.ZERO);
-		account.setAvailableBalance(application.getApprovedCreditLimit());
-		account.setMinimumDueAmount(BigDecimal.ZERO);
-		
-		//Default date  5 No card product exists yet at this point.
-		account.setStatementCycleDay(DEFAULT_STATEMENT_CYCLE_DAY);
-		
-		account.setLastStatementDate(null);
-		account.setLastStatementBalance(null);
-		account.setNextDueDate(null);
-		account.setLastPaymentDate(null);
-		account.setLastPaymentAmount(null);
-		account.setActivatedAt(Instant.now());
-		
-		CreditAccount savedAccount = accountRepository.save(account);
+		CreditAccount savedAccount = accountRepository.save(buildCreditAccount(application, accountNumber));
 		
 		return accountMapper.toResponse(savedAccount);
 	}
-	//get all my accounts(Customer)
+	
+	/**
+	 * 
+     * CUSTOMER → gets only their accounts
+     * ADMIN → gets all accounts (optional filter by status)
+     *
+	 */
 	@Override
-	public ApiResponse<List<CreditAccountResponse>> getMyAccounts(UUID userId) {
-		Customer customer = getCustomerFromUser(userId);
-		
-		List<CreditAccountResponse> accounts = 
-				accountRepository.findAllByCustomerCustomerId(customer.getCustomerId())
-				.stream()
-				.map(accountMapper::toResponse)
-				.collect(Collectors.toList());
+	@Transactional(readOnly = true)
+	public List<CreditAccountResponse> getAccounts(
+	        UUID userId,
+	        String role,
+	        String status) {
 
-		return new ApiResponse<>
-				(Instant.now(),
-				HttpStatus.OK.value(),
-				"Accounts fetched Successfully",accounts);
+	    List<CreditAccount> accounts;
+
+	    if ("CUSTOMER".equals(role)) {
+
+	        Customer customer = customerService.getCustomerByUserId(userId);
+
+	        accounts = accountRepository
+	                .findAllByCustomerCustomerId(customer.getCustomerId());
+
+	    } else { // ADMIN
+
+	        if (status != null) {
+	            AccountStatus accountStatus = parseAccountStatus(status);
+	            accounts = accountRepository.findAllByAccountStatus(accountStatus);
+	        } else {
+	            accounts = accountRepository.findAll();
+	        }
+	    }
+
+	    return accounts.stream()
+	            .map(accountMapper::toResponse)
+	            .collect(Collectors.toList());
 	}
 
-	// GET MY ACCOUNT BY ID (Customer)
+	/**
+	 * Fetch Account By Id
+     * CUSTOMER → only own account
+     * ADMIN → any account
+	 */
 	@Override
-	public ApiResponse<CreditAccountResponse> getMyAccountById(UUID userId, UUID accountId) {
-		
-		Customer customer = getCustomerFromUser(userId);
-		CreditAccount account = findAccountById(accountId);
-		
-		if(!account.getCustomer().getCustomerId().equals(customer.getCustomerId()))
-		{
-			throw new AccessDeniedException("Access Denied to this Account ");
-		}
-		return new ApiResponse<>
-			(Instant.now(),
-			HttpStatus.OK.value(),
-			"Account Fetched Successfully",
-			accountMapper.toResponse(account));
+	public CreditAccountResponse getAccountById(
+	        UUID userId,
+	        String role,
+	        UUID accountId) {
+
+	    CreditAccount creditAccount = findAccountById(accountId);
+
+	    // Authorization check only for CUSTOMER
+	    if ("CUSTOMER".equals(role)) {
+	        Customer customer = customerService.getCustomerByUserId(userId);
+
+	        if (!creditAccount.getCustomer().getCustomerId()
+	                .equals(customer.getCustomerId())) {
+	            throw new AccessDeniedException("Access denied to this account");
+	        }
+	    }
+
+	    // Common response (for both ADMIN + CUSTOMER)
+	    CreditAccountResponse response = accountMapper.toResponse(creditAccount);
+
+	    return response;
 	}
 
-	//Get All accounts (Admin)
+	/**
+	 * Update Account Status(Admin Only)
+	 * Status: ACTIVE,BLOCKED,SUSPENDED,CLOSED
+	 */
 	@Override
-	public ApiResponse<List<CreditAccountResponse>> getAllAccounts() {
-		
-		List<CreditAccountResponse> accounts = accountRepository.findAll()
-                .stream()
-                .map(accountMapper::toResponse)
-                .collect(Collectors.toList());
-		
-		return new ApiResponse<>
-		(Instant.now(),
-		HttpStatus.OK.value(),
-		"All Acccount Fetched Successfully",
-		accounts);
-	}
-
-	// GET ACCOUNTS BY STATUS (Admin)
-	@Override
-	public ApiResponse<List<CreditAccountResponse>> getAccountsByStatus(String status) {
-		AccountStatus accountStatus = parseAccountStatus(status);
-		
-		List<CreditAccountResponse> accounts =
-                accountRepository.findAllByAccountStatus(accountStatus)
-                        .stream()
-                        .map(accountMapper::toResponse)
-                        .collect(Collectors.toList());
-
-        return new ApiResponse<>(Instant.now(), HttpStatus.OK.value(),
-                "Accounts fetched for status: " + status, accounts);
-	}
-
-	 // GET ACCOUNT BY ID (Admin)
-	@Override
-	public ApiResponse<CreditAccountResponse> getAccountById(UUID accountId) {
-		CreditAccountResponse response = accountMapper.toResponse(findAccountById(accountId));
-		
-		return new ApiResponse<>
-			(Instant.now(),
-			HttpStatus.OK.value(),
-	        "Account fetched successfully",
-	        response);
-	}
-
-	// UPDATE ACCOUNT STATUS (Admin)
-	@Override
-	public ApiResponse<CreditAccountResponse> updateAccountStatus(UUID accountId,
+	public CreditAccountResponse updateAccountStatus(UUID accountId,
 			CreditAccountStatusUpdateRequest request) {
 		CreditAccount account = findAccountById(accountId);
         AccountStatus newAccountStatus = parseAccountStatus(request.getStatus());
@@ -210,37 +190,157 @@ public class CreditAccountServiceImpl implements CreditAccountService {
         }
         
         CreditAccountResponse response = accountMapper.toResponse(accountRepository.save(account));
-
-        
-
-		return new ApiResponse<>
-				(Instant.now(),
-				HttpStatus.OK.value(),
-				"Account Status updated to"+newAccountStatus,
-				response);
+		return response;
 	}
 	
-	//Helper method 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Used by {@link CreditCardServiceImpl} and {@link TransactionServiceImpl}
+     * to resolve the account entity without direct repository access.
+     */
 	
+	@Override
+    @Transactional(readOnly = true)
+    public CreditAccount getAccountEntity(UUID accountId) {
+        return findAccountById(accountId);
+    }
+	
+	/**
+     * {@inheritDoc}
+     *
+     * <p>Used by {@link CreditAccountApplicationServiceImpl} to guard against
+     * duplicate account creation without cross-domain repository access.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public boolean accountExistsForApplication(UUID applicationId) {
+        return accountRepository.existsByApplicationApplicationId(applicationId);
+    }
+ 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Used by {@link IssuedCardActiveCardChecker} to enforce the duplicate-account
+     * gate without injecting the account repository directly.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasActiveAccountForProduct(UUID customerId, Long creditProductId) {
+        return accountRepository
+                .existsByCustomerCustomerIdAndCreditProductCreditProductIdAndAccountStatus(
+                        customerId, creditProductId, AccountStatus.ACTIVE);
+    }
+ 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Called by {@link TransactionServiceImpl} so the transaction domain
+     * never writes directly to the accounts repository.
+     */
+    @Override
+    public void deductBalance(UUID accountId, BigDecimal amount) {
+    	//Check the amount > 0
+    	if (amount==null || amount.compareTo(BigDecimal.ZERO)<=0) {
+    		throw new BusinessRuleException("Amount Must be greater than Zero");
+		}
+        CreditAccount creditAccount = findAccountById(accountId);
+        validateAccountActive(creditAccount);
+        
+        // Balance validation (defensive)
+        if (creditAccount.getAvailableBalance().compareTo(amount) < 0) {
+            throw new BusinessRuleException("Insufficient available balance");
+        }
+        //Apply Changes
+        creditAccount.setAvailableBalance(creditAccount.getAvailableBalance().subtract(amount));
+        creditAccount.setCurrentBalance(creditAccount.getCurrentBalance().add(amount));
+        accountRepository.save(creditAccount);
+    }
+	/**
+	  * {@inheritDoc}
+     *
+     * <p>Called by {@link TransactionServiceImpl} so the transaction domain
+     * never writes directly to the accounts repository.
+	 */
+    @Override
+	 public void addBalance(UUID accountId, BigDecimal amount) {
+		if (amount==null || amount.compareTo(BigDecimal.ZERO)<=0) {
+			throw new BusinessRuleException("Amount Must be greater than Zero");
+		}
+		CreditAccount creditAccount = findAccountById(accountId);
+		
+		validateAccountActive(creditAccount);
+		//Idempotency check
+		if (creditAccount.getLastPaymentAmount() != null &&
+				creditAccount.getLastPaymentDate() != null &&
+						creditAccount.getLastPaymentDate().isAfter(Instant.now().minusSeconds(10))) {
+		        throw new ConflictException("Duplicate payment detected");
+		    }
+
+
+		// cannot exceed credit limit
+		BigDecimal newAvailable = creditAccount.getAvailableBalance().add(amount);
+		
+		if (newAvailable.compareTo(creditAccount.getCreditLimit())>0) {
+			newAvailable=creditAccount.getCreditLimit();	
+		}
+		
+		BigDecimal newCurrentBalance = creditAccount.getCurrentBalance().subtract(amount);
+		
+		//Prevent negative outstanding (overpayment case)
+	    if (newCurrentBalance.compareTo(BigDecimal.ZERO) < 0) {
+	        newCurrentBalance = BigDecimal.ZERO;
+	    }
+	    
+	    creditAccount.setLastPaymentAmount(amount);
+	    creditAccount.setLastPaymentDate(Instant.now());
+
+	    accountRepository.save(creditAccount);
+
+	 }
+    
+	//-----------------Helper method------------------------------ 
+	/**
+	 * Find Credit Account by id 
+	 * @param accountId
+	 * @return
+	 */
 	private CreditAccount findAccountById(UUID accountId) {
         return accountRepository.findById(accountId)
                 .orElseThrow(() ->
                         new ResourceNotFoundException("Account with id " + accountId + " not found"));
     }
 	
-	private Customer getCustomerFromUser(UUID userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() ->
-                        new UserNotFoundException("User with id " + userId + " not found"));
-
-        Customer customer = user.getCustomer();
-        if (customer == null) {
-            throw new ProfileNotCreatedException(
-                    "Customer profile not found for user " + userId);
-        }
-        return customer;
+	/**
+	 * Build Credit account 
+	 * @param application
+	 * @param accountNumber
+	 * @return
+	 */
+    private CreditAccount buildCreditAccount(CreditCardApplication application, String accountNumber) {
+    	//Build Account entity
+        CreditAccount account = new CreditAccount();
+        account.setAccountNumber(accountNumber);
+        account.setCustomer(application.getCustomer());
+        account.setApplication(application);
+        account.setCreditProduct(application.getCreditProduct());
+        account.setAccountStatus(AccountStatus.ACTIVE);
+        //Credit terms -from application
+        account.setCreditLimit(application.getApprovedCreditLimit());
+        account.setApr(application.getApprovedApr());
+        account.setCurrentBalance(BigDecimal.ZERO);
+        account.setAvailableBalance(application.getApprovedCreditLimit());
+        account.setMinimumDueAmount(BigDecimal.ZERO);
+        account.setStatementCycleDay(DEFAULT_STATEMENT_CYCLE_DAY);
+        account.setLastStatementDate(null);
+        account.setLastStatementBalance(null);
+        account.setNextDueDate(null);
+        account.setLastPaymentDate(null);
+        account.setLastPaymentAmount(null);
+        account.setActivatedAt(Instant.now());
+        return account;
     }
-	
+    
 	private AccountStatus parseAccountStatus(String status) {
         try {
             return AccountStatus.valueOf(status.toUpperCase().trim());
@@ -251,7 +351,18 @@ public class CreditAccountServiceImpl implements CreditAccountService {
                             + Arrays.toString(AccountStatus.values()));
         }
     }
-	
+	/**
+	 * Validate account is active or not and Prevent operation on closed account
+	 * @param account
+	 */
+	private void validateAccountActive(CreditAccount account) {
+	    if (account.getAccountStatus() == AccountStatus.CLOSED) {
+	        throw new BusinessRuleException("Operation not allowed on CLOSED account");
+	    }
+	    if (account.getAccountStatus() != AccountStatus.ACTIVE) {
+	        throw new BusinessRuleException("Account is not active");
+	    }
+	}
 	
 	/**
      * Valid status transitions:
@@ -281,5 +392,4 @@ public class CreditAccountServiceImpl implements CreditAccountService {
                             + "It is a terminal state.");
         }
     }
-
 }

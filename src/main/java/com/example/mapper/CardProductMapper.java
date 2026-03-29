@@ -5,7 +5,6 @@ import com.example.dto.request.CardProductUpdateRequest;
 import com.example.dto.response.CardProductCreateResponse;
 import com.example.dto.response.CardProductResponse;
 import com.example.entity.CreditCardProduct;
-import com.example.entity.CreditProduct;
 import com.example.enums.ProductStatus;
 
 import java.util.Optional;
@@ -15,12 +14,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class CardProductMapper {
 
-    public CreditCardProduct toEntity(CardProductCreateRequest request,
-                                      CreditProduct creditProduct) {
+    public CreditCardProduct toEntity(CardProductCreateRequest request) {
 
         CreditCardProduct card = new CreditCardProduct();
 
-        card.setCreditProduct(creditProduct);
         card.setProductName(request.getProductName());
         card.setNetworkType(request.getNetworkType());
         card.setCardType(request.getCardType());
@@ -48,8 +45,6 @@ public class CardProductMapper {
 
         return new CardProductResponse(
                 card.getCardProductId(),
-                card.getCreditProduct().getCreditProductId(),
-                card.getCreditProduct().getProductName(),
                 card.getProductName(),
                 card.getNetworkType(),
                 card.getCardType(),
@@ -69,7 +64,7 @@ public class CardProductMapper {
         );
     }
     //Create Response mapper
-    public CardProductCreateResponse toCreateResponse(CreditCardProduct card) {
+    public CardProductCreateResponse toCardProductSummaryResponse(CreditCardProduct card) {
 
         return new CardProductCreateResponse(
                 card.getCardProductId(),

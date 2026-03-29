@@ -1,16 +1,14 @@
 package com.example.service.ServiceImpl;
 
-import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.example.dto.request.CreditProductCreateRequest;
 import com.example.dto.request.CreditProductUpdateRequest;
-import com.example.dto.response.ApiResponse;
 import com.example.dto.response.CreditProductCreateResponse;
 import com.example.dto.response.CreditProductResponse;
 import com.example.entity.CreditProduct;
@@ -22,50 +20,39 @@ import com.example.repository.CreditProductRepository;
 import com.example.service.CreditProductService;
 import com.example.util.ProductCodeGenerator;
 
-import jakarta.transaction.Transactional;
 
+/**
+ * Implementation of {@link CreditProductService}.
+ *
+ */
 @Service
 @Transactional
 public class CreditProductServiceImpl implements CreditProductService {
 
 	
-	private final CreditProductRepository creditProductRepository;
-	private final CreditProductMapper mapper;
-	private final ProductCodeGenerator codeGenerator;
+    private final CreditProductRepository creditProductRepository;
+    private final CreditProductMapper mapper;
+    private final ProductCodeGenerator codeGenerator;
+ 
+    public CreditProductServiceImpl(
+            CreditProductRepository creditProductRepository,
+            CreditProductMapper mapper,
+            ProductCodeGenerator codeGenerator) {
+        this.creditProductRepository = creditProductRepository;
+        this.mapper = mapper;
+        this.codeGenerator = codeGenerator;
+    }
 
-	public CreditProductServiceImpl(CreditProductRepository creditProductRepository, CreditProductMapper mapper, ProductCodeGenerator codeGenerator) {
-		this.creditProductRepository = creditProductRepository;
-		this.mapper = mapper;
-		this.codeGenerator = codeGenerator;
-	}
-
-	// Create Product
+	/**
+	 * Credit Product Create 
+	 */
 	@Override
-	public ApiResponse<CreditProductCreateResponse> create(CreditProductCreateRequest request) {
+	public CreditProductCreateResponse create(CreditProductCreateRequest request) {
 		
-		//Credit Limit Validation check
-		if(request.getMinCreditLimit().compareTo(request.getMaxCreditLimit())>0) {
-			throw new BusinessRuleException("Minimum Credit Limit can not exceed maximum credit limit");
-		}
-		
-
-	    // Effective from cannot be past
-	    if (request.getEffectiveFrom().isBefore(LocalDate.now())) {
-	        throw new BusinessRuleException("Effective start date cannot be in the past");
-	    }
-	    
-	    
-		//Date Validation check
-		 if (request.getEffectiveTo() != null &&
-			        request.getEffectiveTo().isBefore(request.getEffectiveFrom())) {
-
-			        throw new BusinessRuleException(
-			                "Effective end date cannot be before start date");
-			    }
-		 
+		validateCreditLimits(request);
+		validateEffectiveDates(request);
 		 
 		CreditProduct product = mapper.toEntity(request);
-		// credit product code generation
 		String baseCode = codeGenerator.generateBaseCode(request.getProductName());
 
 		String finalCode = generateUniqueCode(baseCode);
@@ -74,56 +61,133 @@ public class CreditProductServiceImpl implements CreditProductService {
 		
 		CreditProductCreateResponse response = mapper.toCreateResponse(creditProductRepository.save(product));
 		
-		return new ApiResponse<>(Instant.now(), HttpStatus.CREATED.value(), "Credit Product Created Successfully",
-				response);
+        return response;
 	}
 
-	// Get Specific Product
-	@Override
-	public ApiResponse<CreditProductResponse> getById(Long id) {
+    @Override
+    @Transactional(readOnly = true)
+	public CreditProductResponse getById(Long id) {
 		CreditProduct product = findById(id);
-		CreditProductResponse response = mapper.toResponse(product);
-
-		return new ApiResponse<>(Instant.now(), HttpStatus.OK.value(), "Credit Product fetched Successfully", response);
-
+		return mapper.toResponse(product);
 	}
 
-	@Override
-	public ApiResponse<List<CreditProductResponse>> getAll() {
-		List<CreditProductResponse> list = creditProductRepository.findAll().stream().map(mapper::toResponse)
-				.collect(Collectors.toList());
-		return new ApiResponse<>(Instant.now(), HttpStatus.OK.value(), "Credit product fetched Successfully", list);
-	}
+    @Override
+    @Transactional(readOnly = true)
+    public List<CreditProductResponse> getAll() {
 
-	@Override
-	public ApiResponse<List<CreditProductResponse>> getAllActive() {
-		List<CreditProductResponse> list = creditProductRepository.findAllByStatus(ProductStatus.ACTIVE).stream()
-				.map(mapper::toResponse).collect(Collectors.toList());
+        return creditProductRepository.findAll()
+                .stream()
+                .map(mapper::toResponse)
+                .collect(Collectors.toList());
+    }
 
-		return new ApiResponse<>(Instant.now(), HttpStatus.OK.value(), "Active Credit product futched Successfully",
-				list);
-	}
+    @Override
+    @Transactional(readOnly = true)
+    public List<CreditProductResponse> getAllActive() {
 
-	@Override
-	public ApiResponse<CreditProductResponse> update(Long id, CreditProductUpdateRequest request) {
+        return creditProductRepository.findAllByStatus(ProductStatus.ACTIVE)
+                .stream()
+                .map(mapper::toResponse)
+                .collect(Collectors.toList());
+    }
 
-		CreditProduct product = findById(id);
+    @Override
+    public CreditProductResponse update(Long id, CreditProductUpdateRequest request) {
 
-		if (product.getStatus() == ProductStatus.INACTIVE) {
-			throw new BusinessRuleException("Cannot update an inactive credit product");
-		}
+        CreditProduct product = findById(id);
 
-		applyUpdates(request, product);
-		// product.setUpdatedBy("ADMIN");
+        if (product.getStatus() == ProductStatus.INACTIVE) {
+            throw new BusinessRuleException("Cannot update an inactive credit product");
+        }
 
-		CreditProductResponse response = mapper.toResponse(creditProductRepository.save(product));
+        applyUpdates(request, product);
 
-		return new ApiResponse<>(Instant.now(), HttpStatus.OK.value(), "Credit product updated successfully", response);
-	}
+        return mapper.toResponse(
+                creditProductRepository.save(product)
+        );
+    }
 
 
-	// Helpers
-	private void applyUpdates(CreditProductUpdateRequest request, CreditProduct product) {
+    @Override
+    public String updateStatus(Long id, ProductStatus status) {
+
+        CreditProduct creditProduct = findById(id);
+
+        if (creditProduct.getStatus() == status) {
+            throw new BusinessRuleException(
+                    "Credit product is already " + status.name().toLowerCase());
+        }
+
+        creditProduct.setStatus(status);
+        creditProductRepository.save(creditProduct);
+
+        return status == ProductStatus.ACTIVE
+                ? "ACTIVE"
+                : "INACTIVE";
+    }
+	
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Returns the entity only if ACTIVE; throws {@link BusinessRuleException} otherwise.
+     */
+	
+    @Override
+    @Transactional(readOnly = true)
+    public CreditProduct getActiveCreditProduct(Long creditProductId) {
+        CreditProduct product = findById(creditProductId);
+        if (product.getStatus() == ProductStatus.INACTIVE) {
+            throw new BusinessRuleException("Selected credit product is no longer available");
+        }
+        return product;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Returns the entity regardless of status.
+     * Use {@link #getActiveCreditProduct} when the product must be active.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public CreditProduct getCreditProductEntity(Long creditProductId) {
+        return findById(creditProductId);
+    }
+	
+	// --------------------Private Helpers--------------
+	
+    private CreditProduct findById(Long id) {
+        return creditProductRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Credit product with id " + id + " not found"));
+    }
+    /**
+     * //Credit Limit Validation check
+     * @param request
+     */
+    private void validateCreditLimits(CreditProductCreateRequest request) {
+        if (request.getMinCreditLimit().compareTo(request.getMaxCreditLimit()) > 0) {
+            throw new BusinessRuleException("Minimum credit limit cannot exceed maximum credit limit");
+        }
+    }
+    
+    /**
+     * Validation of Effective date:
+     * -Effective from cannot be past
+     * @param request
+     */
+    private void validateEffectiveDates(CreditProductCreateRequest request) {
+        if (request.getEffectiveFrom().isBefore(LocalDate.now())) {
+            throw new BusinessRuleException("Effective start date cannot be in the past");
+        }
+        if (request.getEffectiveTo() != null
+                && request.getEffectiveTo().isBefore(request.getEffectiveFrom())) {
+            throw new BusinessRuleException("Effective end date cannot be before start date");
+        }
+    }
+    
+    
+    private void applyUpdates(CreditProductUpdateRequest request, CreditProduct product) {
 		if (request.getProductName() != null)
 			product.setProductName(request.getProductName());
 		if (request.getMinCreditLimit() != null)
@@ -165,13 +229,12 @@ public class CreditProductServiceImpl implements CreditProductService {
 		if (request.getEffectiveTo() != null)
 			product.setEffectiveTo(request.getEffectiveTo());
 	}
-
-	private CreditProduct findById(Long id) {
-		return creditProductRepository.findById(id)
-				.orElseThrow(() -> new ResourceNotFoundException("Credit product with id " + id + " not found"));
-	}
-	
-	// helper for code generation
+    
+    /**
+     * Unique Product Code Generator
+     * @param baseCode
+     * @return
+     */
 		private String generateUniqueCode(String baseCode) {
 
 			int counter = 1;
@@ -184,33 +247,6 @@ public class CreditProductServiceImpl implements CreditProductService {
 			}
 
 			return newCode;
-		}
-
-		@Override
-		public ApiResponse<String> updateStatus(Long id, ProductStatus status) {
-			CreditProduct creditProduct = findById(id);
-			
-			// Prevent updating to the same status
-	        if (creditProduct.getStatus() == status) {
-	            throw new BusinessRuleException(
-	                    "Credit product is already " + status.name().toLowerCase());
-	        }
-	        
-	        creditProduct.setStatus(status);
-	        
-	        creditProductRepository.save(creditProduct);
-	        
-	        
-	        String message = status == ProductStatus.ACTIVE
-	                ? "Credit product activated successfully"
-	                : "Credit product deactivated successfully";
-
-	        return new ApiResponse<>(
-	                Instant.now(),
-	                HttpStatus.OK.value(),
-	                message,
-	                status.name()
-	        );
 		}
 
 }

@@ -13,7 +13,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Data
 @AllArgsConstructor
 @Schema(description = "Response containing details of a credit card application")
-public class CreditCardApplicationCreateResponse {
+public class CreditCardApplicationSummaryResponse {
 
 @Schema(
     description = "Unique identifier of the application",

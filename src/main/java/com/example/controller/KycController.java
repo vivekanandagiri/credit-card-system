@@ -10,13 +10,17 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.example.api.KycApi;
-import com.example.dto.request.KycVerifyRequest;
+import com.example.dto.request.KycStatusUpdateRequest;
 import com.example.dto.response.ApiResponse;
 import com.example.dto.response.KycResponse;
 import com.example.enums.KycStatus;
 import com.example.security.CustomUserPrincipal;
 import com.example.service.KycService;
 
+/**
+ * REST endpoint for Identity Verification routing.
+ * Delegates all business and compliance rules to the KycService.
+ */
 @RestController
 public class KycController implements KycApi {
 
@@ -33,49 +37,61 @@ public class KycController implements KycApi {
             String documentNumber,
             MultipartFile file) {
 
-        ApiResponse<String> response =
-                kycService.uploadKyc(
-                        principal.getCustomerId(),
-                        documentType,
-                        documentNumber,
-                        file
-                );
+        // IDOR Protection: Forcing the customerId from the token context
+        String result = kycService.uploadKyc(
+                principal.getCustomerId(),
+                documentType,
+                documentNumber,
+                file
+        );
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(
+                		HttpStatus.CREATED,
+                		"KYC submitted successfully",
+                		result));
     }
 
     @Override
     public ResponseEntity<ApiResponse<KycResponse>> getStatus(
-            CustomUserPrincipal principal,KycStatus status) {
+            CustomUserPrincipal principal, KycStatus status) {
 
-        ApiResponse<KycResponse> response =
-                kycService.getKycStatus(principal.getCustomerId());
+        KycResponse result = kycService.getKycStatus(principal.getCustomerId());
 
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponse.success(
+        		HttpStatus.OK,
+        		"KYC status fetched successfully",
+        		result));
     }
+
+    // SECURITY: strictly gated to Back-Office personnel. 
     @PreAuthorize("hasRole('ADMIN')")
     @Override
     public ResponseEntity<ApiResponse<String>> verify(
             UUID kycId,
             CustomUserPrincipal principal,
-            KycVerifyRequest request) {
+            @RequestBody KycStatusUpdateRequest request) {
 
-        ApiResponse<String> response =
-                kycService.verifyKyc(
-                        kycId,
-                        principal.getUserId(),
-                        request
-                );
+        // The admin's UUID is passed down to maintain the compliance audit trail (who approved what)
+        String result = kycService.updateKycStatus(kycId, principal.getUserId(), request);
 
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponse.success(
+        		HttpStatus.OK,
+        		"KYC status updated successfully", result));
     }
+
+    // SECURITY: strictly gated to Back-Office personnel. 
     @PreAuthorize("hasRole('ADMIN')")
     @Override
     public ResponseEntity<ApiResponse<List<KycResponse>>> pending() {
 
-        ApiResponse<List<KycResponse>> response =
-                kycService.getPendingKyc();
+        List<KycResponse> result = kycService.getPendingKyc();
 
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                		HttpStatus.OK,
+                		"Pending KYC records fetched successfully",
+                		result)
+        );
     }
 }
