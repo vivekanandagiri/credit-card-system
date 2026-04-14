@@ -9,6 +9,7 @@ import java.util.UUID;
 
 import com.example.enums.Currency;
 import com.example.enums.TransactionStatus;
+import com.example.enums.TransactionType;
 
 @Getter
 @Setter
@@ -37,6 +38,10 @@ public class TransactionSummaryResponse {
     )
     private TransactionStatus transactionStatus;
 
+    @Schema(description = "Transaction type", example = "PURCHASE", allowableValues = {"PURCHASE", "ONLINE"})
+    private TransactionType transactionType;
+    
+    
     @Schema(
         description = "Transaction amount",
         example = "1500.50"

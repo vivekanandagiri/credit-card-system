@@ -93,10 +93,12 @@ public class KycServiceImpl implements KycService {
 
         applyKycDecision(kyc, request, adminId);
         
-        // kycRepository.save(kyc) is omitted here because @Transactional ensures 
-        // the dirty-checked entity is automatically flushed to the DB.
+        applyKycDecision(kyc, request, adminId);
+
+        kycRepository.save(kyc);
 
         return kyc.getStatus().name();
+
     }
 
 	/** Returns the active KYC record for the customer. */

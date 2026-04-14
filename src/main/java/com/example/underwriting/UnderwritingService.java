@@ -15,29 +15,46 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Core brain of the underwriting system.
+ * Core underwriting engine responsible for evaluating credit card applications.
  *
- * Pipeline:
- * 1. Build ApplicationContext (compute derived fields)
- * 2. Load active rules from DB by type
- * 3. Evaluate ELIGIBILITY rules  → hard reject on first failure
- * 4. Evaluate RISK_SCORING rules → compute risk score
- * 5. Evaluate FRAUD rules        → flag for manual review if triggered
- * 6. Pass everything to DecisionEngine → returns UnderwritingDecision
+ * <p>This service orchestrates the complete decision-making pipeline by:
+ * <ul>
+ *     <li>Building an {@link ApplicationContext} with derived attributes</li>
+ *     <li>Fetching active rules from the database</li>
+ *     <li>Evaluating eligibility, risk scoring, and fraud rules</li>
+ *     <li>Delegating final decision to {@link DecisionEngine}</li>
+ * </ul>
  *
- * NOTE: This service only computes and returns the decision.
- * Persisting the result back to credit_card_applications
- * is the responsibility of CreditCardApplicationServiceImpl.
+ * <p><b>Processing Pipeline:</b></p>
+ * <ol>
+ *     <li><b>Context Creation</b> — Convert raw application into enriched context</li>
+ *     <li><b>Eligibility Rules</b> — Hard rejection if any rule fails</li>
+ *     <li><b>Risk Scoring</b> — Compute aggregate risk score</li>
+ *     <li><b>Fraud Detection</b> — Flag suspicious cases for manual review</li>
+ *     <li><b>Decision</b> — Final outcome determined by {@link DecisionEngine}</li>
+ * </ol>
+ *
+ * <p><b>Important:</b> This service is stateless and does NOT persist results.
+ * Persistence is handled by {@code CreditAccountApplicationServiceImpl}.</p>
  */
 @Service
 @Transactional
 public class UnderwritingService {
-
+	//Constructor Injection
     private final UnderwritingRuleRepository ruleRepository;
     private final RuleEvaluator ruleEvaluator;
     private final RiskScoringService riskScoringService;
     private final DecisionEngine decisionEngine;
 
+
+    /**
+     * Constructs the underwriting service with required dependencies.
+     *
+     * @param ruleRepository     repository for retrieving rules
+     * @param ruleEvaluator      rule evaluation engine
+     * @param riskScoringService service for computing risk score
+     * @param decisionEngine     final decision engine
+     */
     public UnderwritingService(UnderwritingRuleRepository ruleRepository,
                                RuleEvaluator ruleEvaluator,
                                RiskScoringService riskScoringService,
@@ -49,8 +66,21 @@ public class UnderwritingService {
     }
 
 
-    // MAIN ENTRY POINT
-
+    /**
+     * Evaluates a credit card application and returns an underwriting decision.
+     *
+     * <p>This method executes the full underwriting pipeline:</p>
+     * <ul>
+     *     <li>Builds application context</li>
+     *     <li>Executes eligibility checks (hard rejection possible)</li>
+     *     <li>Calculates risk score</li>
+     *     <li>Evaluates fraud signals</li>
+     *     <li>Generates final decision</li>
+     * </ul>
+     *
+     * @param application the credit card application entity
+     * @return {@link UnderwritingDecision} containing decision, score, and reasons
+     */
     public UnderwritingDecision evaluate(CreditCardApplication application) {
 
         // Step 1 — Build context with all derived fields
@@ -69,6 +99,10 @@ public class UnderwritingService {
                 ruleRepository.findAllByRuleTypeAndIsActiveTrueOrderByPriorityAsc(
                         RuleType.FRAUD);
 
+        /*
+         * Tracks all rules that were triggered during evaluation.
+         * Useful for audit, debugging, and explainability.
+         */
         List<String> appliedRules = new ArrayList<>();
 
         // Step 3 — ELIGIBILITY: hard stop on first REJECT

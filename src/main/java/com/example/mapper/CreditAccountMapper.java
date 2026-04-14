@@ -28,7 +28,6 @@ public class CreditAccountMapper {
                 .lastStatementDate(account.getLastStatementDate())
                 .lastStatementBalance(account.getLastStatementBalance())
                 .nextDueDate(account.getNextDueDate())
-                .minimumDueAmount(account.getMinimumDueAmount())
                 .lastPaymentDate(account.getLastPaymentDate())
                 .lastPaymentAmount(account.getLastPaymentAmount())
                 .activatedAt(account.getActivatedAt())

@@ -13,6 +13,7 @@ import com.example.api.CreditAccountApi;
 import com.example.dto.request.CreditAccountStatusUpdateRequest;
 import com.example.dto.response.ApiResponse;
 import com.example.dto.response.CreditAccountResponse;
+import com.example.enums.AccountStatus;
 import com.example.security.CustomUserPrincipal;
 import com.example.service.CreditAccountService;
 
@@ -27,62 +28,60 @@ public class CreditAccountController implements CreditAccountApi {
         this.accountService = accountService;
     }
 
-
     /**
      * CUSTOMER → gets only their accounts
      * ADMIN → gets all accounts (optional filter by status)
-     *
-     * GET /api/v1/accounts
      */
     @Override
     @PreAuthorize("hasAnyRole('CUSTOMER','ADMIN')")
     public ResponseEntity<ApiResponse<List<CreditAccountResponse>>> getAccounts(
             @AuthenticationPrincipal CustomUserPrincipal principal,
-            @RequestParam(required = false) String status) {
+            @RequestParam(required = false) AccountStatus status) {
 
-    	List<CreditAccountResponse> responses =
+        List<CreditAccountResponse> responses =
                 accountService.getAccounts(
                         principal.getUserId(),
-                        principal.getRole().name(),
+                        principal.getRole(), // ✅ pass enum directly (better)
                         status
                 );
 
         return ResponseEntity.ok(
-                ApiResponse.success(HttpStatus.OK,"Accounts fetched successfully", responses)
+                ApiResponse.success(
+                        HttpStatus.OK,
+                        "Accounts fetched successfully",
+                        responses
+                )
         );
     }
 
-   
     /**
-     * Fetch Account By Id
      * CUSTOMER → only own account
      * ADMIN → any account
-     *
-     * GET /api/v1/accounts/{accountId}
      */
-   @Override
+    @Override
     @PreAuthorize("hasAnyRole('CUSTOMER','ADMIN')")
     public ResponseEntity<ApiResponse<CreditAccountResponse>> getAccountById(
             @AuthenticationPrincipal CustomUserPrincipal principal,
             @PathVariable UUID accountId) {
 
-	   CreditAccountResponse responses =
-               accountService.getAccountById(
-                       principal.getUserId(),
-                       principal.getRole().name(),
-                       accountId
-               );
+        CreditAccountResponse response =
+                accountService.getAccountById(
+                        principal.getUserId(),
+                        principal.getRole(), // ✅ enum instead of string
+                        accountId
+                );
 
-       return ResponseEntity.ok(
-               ApiResponse.success(HttpStatus.OK,"Account fetched successfully", responses)
-       );
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        HttpStatus.OK,
+                        "Account fetched successfully",
+                        response
+                )
+        );
     }
 
-
-
     /**
-     * Update Account Status
-     * PATCH /api/v1/accounts/{accountId}
+     * ADMIN → update account status
      */
     @Override
     @PreAuthorize("hasRole('ADMIN')")
@@ -90,14 +89,14 @@ public class CreditAccountController implements CreditAccountApi {
             @PathVariable UUID accountId,
             @Valid @RequestBody CreditAccountStatusUpdateRequest request) {
 
-    	CreditAccountResponse responses =
+        CreditAccountResponse response =
                 accountService.updateAccountStatus(accountId, request);
 
         return ResponseEntity.ok(
                 ApiResponse.success(
-                		HttpStatus.OK,
+                        HttpStatus.OK,
                         "Account status updated successfully",
-                        responses
+                        response
                 )
         );
     }

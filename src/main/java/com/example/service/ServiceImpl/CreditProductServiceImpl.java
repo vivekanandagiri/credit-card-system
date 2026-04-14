@@ -4,6 +4,8 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,13 +24,16 @@ import com.example.util.ProductCodeGenerator;
 
 
 /**
- * Implementation of {@link CreditProductService}.
- *
+ * Build The lifecycle and configuration of Credit Card Products.
+ * <p>
+ * This service acts as the source of truth for product rules (APRs, fees, limits).
+ * Changes to these entities directly impact down-stream billing and origination engines.
  */
 @Service
 @Transactional
 public class CreditProductServiceImpl implements CreditProductService {
 
+	private static final Logger log = LoggerFactory.getLogger(CreditProductServiceImpl.class);
 	
     private final CreditProductRepository creditProductRepository;
     private final CreditProductMapper mapper;
@@ -47,6 +52,7 @@ public class CreditProductServiceImpl implements CreditProductService {
 	 * Credit Product Create 
 	 */
 	@Override
+	@Transactional
 	public CreditProductCreateResponse create(CreditProductCreateRequest request) {
 		
 		validateCreditLimits(request);
@@ -59,8 +65,10 @@ public class CreditProductServiceImpl implements CreditProductService {
 
 		product.setProductCode(finalCode);
 		
-		CreditProductCreateResponse response = mapper.toCreateResponse(creditProductRepository.save(product));
+		CreditProduct savedProduct = creditProductRepository.save(product);
 		
+		CreditProductCreateResponse response = mapper.toCreateResponse(savedProduct);
+		log.info("New credit product created: {} with code {}", savedProduct.getProductName(), finalCode);
         return response;
 	}
 
@@ -95,20 +103,67 @@ public class CreditProductServiceImpl implements CreditProductService {
     public CreditProductResponse update(Long id, CreditProductUpdateRequest request) {
 
         CreditProduct product = findById(id);
-
-        if (product.getStatus() == ProductStatus.INACTIVE) {
-            throw new BusinessRuleException("Cannot update an inactive credit product");
+        // Handle explicit status updates during a general edit
+        validateStatusTransition(product, request);
+        boolean reactivating =
+                product.getStatus() == ProductStatus.INACTIVE &&
+                request.getStatus() == ProductStatus.ACTIVE;
+        // Prevent updates if inactive (unless activating)
+        // Do not allow modifying the financial parameters of a Inactive product
+        if (product.getStatus() == ProductStatus.INACTIVE && !reactivating) {
+            throw new BusinessRuleException(
+                    "Cannot update an inactive credit product unless reactivating it");
         }
 
         applyUpdates(request, product);
+        
+        validateUpdatedProduct(product);
 
-        return mapper.toResponse(
-                creditProductRepository.save(product)
-        );
+        CreditProduct saved = creditProductRepository.save(product);
+
+        return mapper.toResponse(saved);
     }
 
 
-    @Override
+    private void validateStatusTransition(
+            CreditProduct product,
+            CreditProductUpdateRequest request) {
+
+        if (request.getStatus() != null &&
+            product.getStatus() == request.getStatus()) {
+
+            throw new BusinessRuleException(
+                    "Credit product is already " +
+                    request.getStatus().name().toLowerCase());
+        }
+    }
+    private void validateUpdatedProduct(CreditProduct product) {
+
+        if (product.getMinCreditLimit() != null &&
+            product.getMaxCreditLimit() != null &&
+            product.getMinCreditLimit().compareTo(product.getMaxCreditLimit()) > 0) {
+
+            throw new BusinessRuleException(
+                    "Minimum credit limit cannot exceed maximum credit limit");
+        }
+
+        if (product.getEffectiveFrom() != null &&
+            product.getEffectiveFrom().isBefore(LocalDate.now())) {
+
+            throw new BusinessRuleException(
+                    "Effective start date cannot be in the past");
+        }
+
+        if (product.getEffectiveFrom() != null &&
+            product.getEffectiveTo() != null &&
+            product.getEffectiveTo().isBefore(product.getEffectiveFrom())) {
+
+            throw new BusinessRuleException(
+                    "Effective end date cannot be before start date");
+        }
+    }
+
+	@Override
     public String updateStatus(Long id, ProductStatus status) {
 
         CreditProduct creditProduct = findById(id);
@@ -144,7 +199,6 @@ public class CreditProductServiceImpl implements CreditProductService {
 
     /**
      * {@inheritDoc}
-     *
      * <p>Returns the entity regardless of status.
      * Use {@link #getActiveCreditProduct} when the product must be active.
      */
@@ -162,7 +216,7 @@ public class CreditProductServiceImpl implements CreditProductService {
                         "Credit product with id " + id + " not found"));
     }
     /**
-     * //Credit Limit Validation check
+     * Credit Limit Validation check
      * @param request
      */
     private void validateCreditLimits(CreditProductCreateRequest request) {
@@ -173,7 +227,7 @@ public class CreditProductServiceImpl implements CreditProductService {
     
     /**
      * Validation of Effective date:
-     * -Effective from cannot be past
+     * -- Effective from cannot be past
      * @param request
      */
     private void validateEffectiveDates(CreditProductCreateRequest request) {
@@ -228,6 +282,8 @@ public class CreditProductServiceImpl implements CreditProductService {
 			product.setEffectiveFrom(request.getEffectiveFrom());
 		if (request.getEffectiveTo() != null)
 			product.setEffectiveTo(request.getEffectiveTo());
+		if (request.getStatus() != null)
+		    product.setStatus(request.getStatus());
 	}
     
     /**
@@ -235,6 +291,7 @@ public class CreditProductServiceImpl implements CreditProductService {
      * @param baseCode
      * @return
      */
+
 		private String generateUniqueCode(String baseCode) {
 
 			int counter = 1;

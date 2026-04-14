@@ -3,6 +3,8 @@ package com.example.util;
 
 import org.springframework.stereotype.Component;
 
+import com.example.enums.NetworkType;
+
 import java.security.SecureRandom;
 
 /**
@@ -68,7 +70,7 @@ public class MaskedCardNumberGenerator {
      * @param networkType VISA, MASTERCARD, or RUPAY
      * @return masked card number e.g. "411111XXXXXX9563"
      */
-    public String generate(String networkType) {
+    public String generate(NetworkType networkType) {
 
         String bin = resolveBin(networkType);
 
@@ -165,11 +167,11 @@ public class MaskedCardNumberGenerator {
     // PRIVATE HELPERS
     // =====================================================
 
-    private String resolveBin(String networkType) {
-        return switch (networkType.toUpperCase()) {
-            case "VISA"       -> VISA_BIN;
-            case "MASTERCARD" -> MASTERCARD_BIN;
-            case "RUPAY"      -> RUPAY_BIN;
+    private String resolveBin(NetworkType networkType) {
+        return switch (networkType) {
+            case VISA       -> VISA_BIN;
+            case MASTERCARD -> MASTERCARD_BIN;
+            case RUPAY     -> RUPAY_BIN;
             default           -> VISA_BIN;
         };
     }

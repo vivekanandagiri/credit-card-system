@@ -26,15 +26,7 @@ public class CreditCardApplicationRequest {
     @Schema(
         description = "Customer employment type",
         example = "SALARIED",
-        allowableValues = {
-            "SALARIED",
-            "SELF_EMPLOYED",
-            "BUSINESS_OWNER",
-            "FREELANCER",
-            "STUDENT",
-            "RETIRED",
-            "UNEMPLOYED"
-        },
+        implementation = EmploymentType.class,
         requiredMode = Schema.RequiredMode.REQUIRED
     )
     @NotNull(message = "Employment type is required")

@@ -1,8 +1,8 @@
 package com.example.enums;
 
 public enum TransactionChannel {
-	ONLINE,
-	POS,
-	ATM
-
+    POS,       // Physical swipe
+    ONLINE,    // Internet payment
+    ATM,       // Cash withdrawal
+    SYSTEM     // Bank-generated
 }

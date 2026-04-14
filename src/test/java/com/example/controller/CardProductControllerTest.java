@@ -22,6 +22,8 @@ import org.springframework.context.annotation.FilterType;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.example.config.TimezoneInterceptor;
+import com.example.config.WebConfig;
 import com.example.dto.request.CardProductCreateRequest;
 import com.example.dto.request.CardProductUpdateRequest;
 import com.example.dto.response.CardProductCreateResponse;
@@ -36,10 +38,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 @WebMvcTest(
         controllers = CardProductController.class,
         excludeAutoConfiguration = SecurityAutoConfiguration.class,
-        excludeFilters = @Filter(
-                type = FilterType.ASSIGNABLE_TYPE,
-                classes = JwtFilter.class
-        )
+        excludeFilters = { 
+				@Filter(type = FilterType.ASSIGNABLE_TYPE,classes = JwtFilter.class),
+				@Filter(type = FilterType.ASSIGNABLE_TYPE,classes = TimezoneInterceptor.class),
+				@Filter(type = FilterType.ASSIGNABLE_TYPE,classes = WebConfig.class)
+	}
 )
 @AutoConfigureMockMvc(addFilters = false)
 class CardProductControllerTest {
@@ -223,30 +226,4 @@ class CardProductControllerTest {
     	}
     }
 
- // UPDATE STATUS
-    @Nested
-    @DisplayName("Update Card Product Status Tests")
-    class UpdateStatusTests {
-        @Test
-        void updateStatus_deactivate_success() throws Exception {
-
-            UUID id = UUID.randomUUID();
-
-            when(cardProductService.updateStatus(any(UUID.class), any(ProductStatus.class)))
-                    .thenReturn("INACTIVE");
-
-            mockMvc.perform(
-                    patch("/api/v1/card-products/{id}", id)
-                            .param("status", "INACTIVE")
-            )
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.message")
-                            .value("Card product deactivated successfully"))
-                    .andExpect(jsonPath("$.data").value("INACTIVE"))
-                    .andExpect(jsonPath("$.timestamp").exists());
-
-            verify(cardProductService, times(1))
-                    .updateStatus(any(UUID.class), eq(ProductStatus.INACTIVE));
-        }
-    }
 }

@@ -355,52 +355,25 @@ class KycServiceImplTest {
     // =========================================================================
     // isKycVerified  (new method added in refactored service)
     // =========================================================================
-
     @Nested
     class IsKycVerified {
 
         @Test
         void shouldReturnTrueWhenVerifiedRecordExists() {
-            KycRecord verifiedRecord = new KycRecord();
-            verifiedRecord.setStatus(KycStatus.VERIFIED);
+            when(kycRepository.existsByCustomerCustomerIdAndStatus(
+                    customerId, KycStatus.VERIFIED))
+                    .thenReturn(true);
 
-            when(kycRepository.findByCustomerCustomerId(customerId))
-                    .thenReturn(List.of(verifiedRecord));
-
-            assertThat(kycService.isKycVerified(customerId)).isTrue();
+            assertTrue(kycService.isKycVerified(customerId));
         }
 
         @Test
         void shouldReturnFalseWhenNoVerifiedRecord() {
-            KycRecord submittedRecord = new KycRecord();
-            submittedRecord.setStatus(KycStatus.SUBMITTED);
+            when(kycRepository.existsByCustomerCustomerIdAndStatus(
+                    customerId, KycStatus.VERIFIED))
+                    .thenReturn(false);
 
-            when(kycRepository.findByCustomerCustomerId(customerId))
-                    .thenReturn(List.of(submittedRecord));
-
-            assertThat(kycService.isKycVerified(customerId)).isFalse();
-        }
-
-        @Test
-        void shouldReturnFalseWhenNoRecordsExist() {
-            when(kycRepository.findByCustomerCustomerId(customerId))
-                    .thenReturn(List.of());
-
-            assertThat(kycService.isKycVerified(customerId)).isFalse();
-        }
-
-        @Test
-        void shouldReturnTrueWhenAtLeastOneRecordIsVerifiedAmongMultiple() {
-            KycRecord rejected = new KycRecord();
-            rejected.setStatus(KycStatus.REJECTED);
-
-            KycRecord verified = new KycRecord();
-            verified.setStatus(KycStatus.VERIFIED);
-
-            when(kycRepository.findByCustomerCustomerId(customerId))
-                    .thenReturn(List.of(rejected, verified));
-
-            assertThat(kycService.isKycVerified(customerId)).isTrue();
+            assertFalse(kycService.isKycVerified(customerId));
         }
     }
 }

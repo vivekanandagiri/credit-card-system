@@ -12,5 +12,7 @@ public interface CustomerAddressRepository
         extends JpaRepository<CustomerAddress, UUID> {
 
 	List<CustomerAddress> findByCustomerCustomerId(UUID customerId);
+
+	boolean existsByCustomerCustomerId(UUID customerId);
 	
 }

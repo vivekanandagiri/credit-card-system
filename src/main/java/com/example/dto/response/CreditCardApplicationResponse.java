@@ -1,7 +1,9 @@
 package com.example.dto.response;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -16,6 +18,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 @Data
 @AllArgsConstructor
+@NoArgsConstructor
+@Builder
 @Schema(description = "Response containing details of a credit card application")
 public class CreditCardApplicationResponse {
 

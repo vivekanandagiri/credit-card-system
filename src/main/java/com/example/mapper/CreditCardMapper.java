@@ -8,16 +8,25 @@ import org.springframework.stereotype.Component;
 import com.example.dto.response.CreditCardIssuanceResponse;
 import com.example.dto.response.CreditCardResponse;
 import com.example.entity.CreditCard;
-
+/**
+ * Projects the CreditCard domain entity into safe, immutable DTOs for the API layer.
+ * <p>
+ * This mapper relies on deep object graph traversal (e.g., Card -> Account -> Customer).
+ */
 @Component
 public class CreditCardMapper {
 
+	/**
+     * Maps a comprehensive view of the credit card, including inherited limits and lifecycle data.
+     * Used for detailed account views and back-office portals.
+     */
     public CreditCardResponse toResponse(CreditCard creditCard) {
 
     	if (creditCard.getExpiresAt() == null) {
     	    throw new IllegalStateException("Card expiry not set");
     	}
 
+    	
     	LocalDateTime expiry = LocalDateTime.ofInstant(
     	        creditCard.getExpiresAt(), ZoneOffset.UTC);
 
@@ -80,6 +89,9 @@ public class CreditCardMapper {
                 .build();
     }
 
+    /**
+     * Maps a lightweight summary for the immediate response after a successful card issuance.
+     */
     public CreditCardIssuanceResponse toIssueResponse(CreditCard creditCard) {
     	if (creditCard.getExpiresAt() == null) {
     	    throw new IllegalStateException("Card expiry not set");

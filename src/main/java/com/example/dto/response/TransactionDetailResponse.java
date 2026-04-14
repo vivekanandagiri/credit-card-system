@@ -25,6 +25,8 @@ public class TransactionDetailResponse {
 
     @Schema(description = "Unique reference number for tracking", example = "TXN123456789")
     private String referenceNumber;
+    
+    private String transactionReference;
 
     // Card info
     @Schema(description = "Card ID used for transaction")

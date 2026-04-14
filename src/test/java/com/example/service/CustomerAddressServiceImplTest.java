@@ -1,13 +1,23 @@
 package com.example.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+
+import com.example.testutil.TestFixtures;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
 
 import com.example.dto.request.AddressCreateRequest;
 import com.example.dto.response.AddressResponse;
@@ -18,18 +28,6 @@ import com.example.mapper.CustomerAddressMapper;
 import com.example.repository.CustomerAddressRepository;
 import com.example.service.ServiceImpl.CustomerAddressServiceImpl;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-
-/**
- * Unit tests for {@link CustomerAddressServiceImpl}.
- */
 @ExtendWith(MockitoExtension.class)
 class CustomerAddressServiceImplTest {
 
@@ -40,136 +38,185 @@ class CustomerAddressServiceImplTest {
     @InjectMocks
     private CustomerAddressServiceImpl service;
 
+    private UUID userId;
     private UUID customerId;
     private UUID addressId;
+    private Customer customer;
     private AddressCreateRequest request;
 
     @BeforeEach
     void setUp() {
-        customerId = UUID.randomUUID();
-        addressId  = UUID.randomUUID();
-
-        request = new AddressCreateRequest(
-                "HOME",
-                "123 MG Road",
-                "Near Metro",
-                "Bangalore",
-                "Karnataka",
-                "560001",
-                "India",
-                true
-        );
+        userId = UUID.randomUUID();
+        customer = TestFixtures.validCustomer();
+        customerId = customer.getCustomerId();
+        addressId = UUID.randomUUID();
+        request = TestFixtures.validAddressRequest();
     }
 
-    // =========================================================================
-    // addAddress
-    // =========================================================================
+    // ================= ADD ADDRESS =================
 
     @Nested
     @DisplayName("Add Address")
     class AddAddressTests {
 
         @Test
-        void add_address_success() {
-            Customer customer = new Customer();
-            customer.setCustomerId(customerId);
-
+        void shouldAddAddress_whenValidRequest() {
+            // GIVEN
             CustomerAddress address = new CustomerAddress();
 
-            when(customerService.getCustomer(customerId)).thenReturn(customer);
+            when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
             when(addressMapper.toEntity(request, customer)).thenReturn(address);
 
-            String result = service.addAddress(customerId, request);
+            // WHEN
+            String result = service.addAddress(userId, request);
 
-            assertEquals("Address created", result);
+            // THEN
+            assertThat(result).isEqualTo("Address created");
             verify(addressRepository).save(address);
         }
 
         @Test
-        void add_address_customer_not_found() {
-            when(customerService.getCustomer(customerId))
+        void shouldThrowException_whenCustomerNotFound() {
+            // GIVEN
+            when(customerService.getCustomerByUserId(userId))
                     .thenThrow(new ResourceNotFoundException("Customer not found"));
 
-            assertThrows(ResourceNotFoundException.class,
-                    () -> service.addAddress(customerId, request));
+            // WHEN + THEN
+            assertThatThrownBy(() -> service.addAddress(userId, request))
+                    .isInstanceOf(ResourceNotFoundException.class);
 
             verify(addressRepository, never()).save(any());
         }
     }
 
-    // =========================================================================
-    // getAddresses
-    // =========================================================================
+    // ================= GET ADDRESSES =================
 
     @Nested
     @DisplayName("Get Addresses")
     class GetAddressesTests {
 
         @Test
-        void get_addresses_success() {
+        void shouldReturnAddresses_whenPresent() {
+            // GIVEN
             CustomerAddress address = new CustomerAddress();
-            address.setAddressId(addressId);
-            address.setLine1("123 MG Road");
-            address.setCity("Bangalore");
-            address.setState("Karnataka");
-            address.setPostalCode("560001");
-            address.setCountry("India");
+            AddressResponse response = mock(AddressResponse.class);
 
-            AddressResponse addressResponse = mock(AddressResponse.class);
-
-            when(customerService.customerExists(customerId)).thenReturn(true);
+            when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
             when(addressRepository.findByCustomerCustomerId(customerId))
                     .thenReturn(List.of(address));
-            when(addressMapper.toResponse(address)).thenReturn(addressResponse);
+            when(addressMapper.toResponse(address)).thenReturn(response);
 
-            List<AddressResponse> result = service.getAddresses(customerId);
+            // WHEN
+            List<AddressResponse> result = service.getAddresses(userId);
 
+            // THEN
             assertThat(result).hasSize(1);
         }
 
         @Test
-        void get_addresses_customer_not_found() {
-            when(customerService.customerExists(customerId)).thenReturn(false);
-
-            assertThrows(ResourceNotFoundException.class,
-                    () -> service.getAddresses(customerId));
-
-            verify(customerService).customerExists(customerId);
-            verify(addressRepository, never()).findByCustomerCustomerId(any());
-        }
-
-        @Test
-        void get_addresses_empty_list() {
-            when(customerService.customerExists(customerId)).thenReturn(true);
+        void shouldReturnEmptyList_whenNoAddresses() {
+            // GIVEN
+            when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
             when(addressRepository.findByCustomerCustomerId(customerId))
                     .thenReturn(List.of());
 
-            List<AddressResponse> result = service.getAddresses(customerId);
+            // WHEN
+            List<AddressResponse> result = service.getAddresses(userId);
 
-            assertThat(result).hasSize(1);
+            // THEN
+            assertThat(result).isEmpty();
+        }
+
+        @Test
+        void shouldThrowException_whenCustomerNotFound() {
+            // GIVEN
+            when(customerService.getCustomerByUserId(userId))
+                    .thenThrow(new ResourceNotFoundException("Customer not found"));
+
+            // WHEN + THEN
+            assertThatThrownBy(() -> service.getAddresses(userId))
+                    .isInstanceOf(ResourceNotFoundException.class);
+
+            verify(addressRepository, never()).findByCustomerCustomerId(any());
         }
     }
 
-    // =========================================================================
-    // deleteAddress
-    // =========================================================================
+    // ================= DELETE ADDRESS =================
 
     @Nested
     @DisplayName("Delete Address")
     class DeleteAddressTests {
 
         @Test
-        void delete_address_success() {
+        void shouldDeleteAddress_whenValidOwner() {
+            // GIVEN
             CustomerAddress address = new CustomerAddress();
-            address.setAddressId(addressId);
+            address.setCustomer(customer);
 
+            when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
             when(addressRepository.findById(addressId))
                     .thenReturn(Optional.of(address));
 
-            String result = service.deleteAddress(customerId, addressId);
+            // WHEN
+            String result = service.deleteAddress(userId, addressId);
 
-            assertEquals("Address Deleted", result);
+            // THEN
+            assertThat(result).isEqualTo("Address deleted");
             verify(addressRepository).delete(address);
         }
+
+        @Test
+        void shouldThrowException_whenAddressNotFound() {
+            // GIVEN
+            when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
+            when(addressRepository.findById(addressId))
+                    .thenReturn(Optional.empty());
+
+            // WHEN + THEN
+            assertThatThrownBy(() -> service.deleteAddress(userId, addressId))
+                    .isInstanceOf(ResourceNotFoundException.class);
+
+            verify(addressRepository, never()).delete(any());
+        }
+
+        @Test
+        void shouldThrowAccessDenied_whenAddressBelongsToAnotherUser() {
+            // GIVEN
+            Customer anotherCustomer = new Customer();
+            anotherCustomer.setCustomerId(UUID.randomUUID());
+
+            CustomerAddress address = new CustomerAddress();
+            address.setCustomer(anotherCustomer);
+
+            when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
+            when(addressRepository.findById(addressId))
+                    .thenReturn(Optional.of(address));
+
+            // WHEN + THEN
+            assertThatThrownBy(() -> service.deleteAddress(userId, addressId))
+                    .isInstanceOf(AccessDeniedException.class);
+
+            verify(addressRepository, never()).delete(any());
+        }
+    }
+
+    // ================= HAS ADDRESS =================
+
+    @Test
+    void shouldReturnTrue_whenCustomerHasAddress() {
+        when(addressRepository.existsByCustomerCustomerId(customerId)).thenReturn(true);
+
+        boolean result = service.hasAddress(customerId);
+
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    void shouldReturnFalse_whenCustomerHasNoAddress() {
+        when(addressRepository.existsByCustomerCustomerId(customerId)).thenReturn(false);
+
+        boolean result = service.hasAddress(customerId);
+
+        assertThat(result).isFalse();
     }
 }

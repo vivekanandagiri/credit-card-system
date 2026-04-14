@@ -90,6 +90,9 @@ class CreditProductServiceImplTest {
 
             CreditProductCreateRequest request = new CreditProductCreateRequest();
             request.setProductName("Gold Credit Card");
+            request.setMinCreditLimit(new BigDecimal("50000"));
+            request.setMaxCreditLimit(new BigDecimal("500000"));
+            request.setEffectiveFrom(LocalDate.now().plusDays(1));
 
             when(mapper.toEntity(request)).thenReturn(product);
             when(codeGenerator.generateBaseCode(any())).thenReturn("CODE");
@@ -103,6 +106,7 @@ class CreditProductServiceImplTest {
             CreditProductCreateResponse result = service.create(request);
 
             assertNotNull(result);
+
             verify(repository, times(2)).existsByProductCode(any());
         }
 
@@ -182,6 +186,10 @@ class CreditProductServiceImplTest {
             CreditProductUpdateRequest request = new CreditProductUpdateRequest();
             request.setProductName("Updated Card");
 
+            product.setMinCreditLimit(new BigDecimal("50000"));
+            product.setMaxCreditLimit(new BigDecimal("500000"));
+            product.setEffectiveFrom(LocalDate.now().plusDays(1));
+
             when(repository.findById(1L)).thenReturn(Optional.of(product));
             when(repository.save(product)).thenReturn(product);
             when(mapper.toResponse(product)).thenReturn(response);
@@ -202,13 +210,136 @@ class CreditProductServiceImplTest {
         }
 
         @Test
-        void update_inactive_should_throw() {
+        void update_inactive_without_reactivation_should_throw() {
 
             product.setStatus(ProductStatus.INACTIVE);
+
+            CreditProductUpdateRequest request = new CreditProductUpdateRequest();
+            request.setProductName("Updated Card");
+
             when(repository.findById(1L)).thenReturn(Optional.of(product));
 
             assertThrows(BusinessRuleException.class,
-                    () -> service.update(1L, new CreditProductUpdateRequest()));
+                    () -> service.update(1L, request));
+
+            verify(repository, never()).save(any());
+        }
+
+        @Test
+        void update_reactivate_inactive_product_success() {
+
+            product.setStatus(ProductStatus.INACTIVE);
+
+            CreditProductUpdateRequest request = new CreditProductUpdateRequest();
+            request.setStatus(ProductStatus.ACTIVE);
+
+            product.setMinCreditLimit(new BigDecimal("50000"));
+            product.setMaxCreditLimit(new BigDecimal("500000"));
+            product.setEffectiveFrom(LocalDate.now().plusDays(1));
+
+            when(repository.findById(1L)).thenReturn(Optional.of(product));
+            when(repository.save(product)).thenReturn(product);
+            when(mapper.toResponse(product)).thenReturn(response);
+
+            CreditProductResponse result = service.update(1L, request);
+
+            assertNotNull(result);
+            assertEquals(ProductStatus.ACTIVE, product.getStatus());
+            verify(repository).save(product);
+        }
+
+        @Test
+        void update_reactivate_and_modify_fields_success() {
+
+            product.setStatus(ProductStatus.INACTIVE);
+
+            CreditProductUpdateRequest request = new CreditProductUpdateRequest();
+            request.setStatus(ProductStatus.ACTIVE);
+            request.setAprPurchase(new BigDecimal("18.99"));
+
+            product.setMinCreditLimit(new BigDecimal("50000"));
+            product.setMaxCreditLimit(new BigDecimal("500000"));
+            product.setEffectiveFrom(LocalDate.now().plusDays(1));
+
+            when(repository.findById(1L)).thenReturn(Optional.of(product));
+            when(repository.save(product)).thenReturn(product);
+            when(mapper.toResponse(product)).thenReturn(response);
+
+            CreditProductResponse result = service.update(1L, request);
+
+            assertNotNull(result);
+            assertEquals(ProductStatus.ACTIVE, product.getStatus());
+            assertEquals(new BigDecimal("18.99"), product.getAprPurchase());
+
+            verify(repository).save(product);
+        }
+
+        @Test
+        void update_same_status_should_throw() {
+
+            product.setStatus(ProductStatus.ACTIVE);
+
+            CreditProductUpdateRequest request = new CreditProductUpdateRequest();
+            request.setStatus(ProductStatus.ACTIVE);
+
+            when(repository.findById(1L)).thenReturn(Optional.of(product));
+
+            assertThrows(BusinessRuleException.class,
+                    () -> service.update(1L, request));
+
+            verify(repository, never()).save(any());
+        }
+
+        @Test
+        void update_invalid_credit_limits_should_throw() {
+
+            CreditProductUpdateRequest request = new CreditProductUpdateRequest();
+            request.setMinCreditLimit(new BigDecimal("600000"));
+            request.setMaxCreditLimit(new BigDecimal("500000"));
+
+            product.setEffectiveFrom(LocalDate.now().plusDays(1));
+
+            when(repository.findById(1L)).thenReturn(Optional.of(product));
+
+            assertThrows(BusinessRuleException.class,
+                    () -> service.update(1L, request));
+
+            verify(repository, never()).save(any());
+        }
+
+        @Test
+        void update_effective_from_in_past_should_throw() {
+
+            CreditProductUpdateRequest request = new CreditProductUpdateRequest();
+            request.setEffectiveFrom(LocalDate.now().minusDays(1));
+
+            product.setMinCreditLimit(new BigDecimal("50000"));
+            product.setMaxCreditLimit(new BigDecimal("500000"));
+
+            when(repository.findById(1L)).thenReturn(Optional.of(product));
+
+            assertThrows(BusinessRuleException.class,
+                    () -> service.update(1L, request));
+
+            verify(repository, never()).save(any());
+        }
+
+        @Test
+        void update_effective_to_before_effective_from_should_throw() {
+
+            CreditProductUpdateRequest request = new CreditProductUpdateRequest();
+            request.setEffectiveFrom(LocalDate.now().plusDays(10));
+            request.setEffectiveTo(LocalDate.now().plusDays(5));
+
+            product.setMinCreditLimit(new BigDecimal("50000"));
+            product.setMaxCreditLimit(new BigDecimal("500000"));
+
+            when(repository.findById(1L)).thenReturn(Optional.of(product));
+
+            assertThrows(BusinessRuleException.class,
+                    () -> service.update(1L, request));
+
+            verify(repository, never()).save(any());
         }
     }
 }

@@ -13,7 +13,6 @@ import com.example.dto.request.CreditProductUpdateRequest;
 import com.example.dto.response.ApiResponse;
 import com.example.dto.response.CreditProductCreateResponse;
 import com.example.dto.response.CreditProductResponse;
-import com.example.enums.ProductStatus;
 import com.example.service.CreditProductService;
 
 @RestController
@@ -83,23 +82,5 @@ public class CreditProductController implements CreditProductApi {
         );
     }
 
-    @Override
-    public ResponseEntity<ApiResponse<String>> updateStatus(
-            Long id,
-            ProductStatus status) {
 
-        String result =
-                creditProductService.updateStatus(id, status);
-
-        String message = status == ProductStatus.ACTIVE
-                ? "Credit product activated successfully"
-                : "Credit product deactivated successfully";
-
-        return ResponseEntity.ok(
-                ApiResponse.success(
-                		HttpStatus.OK,
-                		message,
-                		result)
-        );
-    }
 }

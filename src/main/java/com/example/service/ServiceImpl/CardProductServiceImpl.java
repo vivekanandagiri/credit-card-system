@@ -135,8 +135,17 @@ public class CardProductServiceImpl implements CardProductService {
     public CardProductResponse update(UUID id, CardProductUpdateRequest request) {
 
         CreditCardProduct card = findById(id);
+        //  Handle status update 
+        if (request.getStatus() != null) {
+            if (card.getStatus() == request.getStatus()) {
+                throw new BadRequestException(
+                        "Card product is already " + request.getStatus().name().toLowerCase());
+            }
+            card.setStatus(request.getStatus());
+        }
 
-        if (card.getStatus() == ProductStatus.INACTIVE) {
+        //  Prevent updating inactive product unless activating it
+        if (card.getStatus() == ProductStatus.INACTIVE && request.getStatus() == null) {
             throw new BadRequestException(
                     "Cannot update an inactive card product");
         }
@@ -152,6 +161,7 @@ public class CardProductServiceImpl implements CardProductService {
                 request.getEcommerceDailyLimit()
         );
 
+        //Apply updates (partial or full)
         cardProductMapper.updateEntity(request, card);
 
         CardProductResponse response =
@@ -160,28 +170,6 @@ public class CardProductServiceImpl implements CardProductService {
         return response;
     }
 
-    /**
-     * Activates or deactivates a card product.
-     *
-     * @param id     card product ID
-     * @param status new target status
-     */
-    @Override
-    public String updateStatus(UUID id, ProductStatus status) {
-
-        CreditCardProduct card = findById(id);
-
-        if (card.getStatus() == status) {
-            throw new BadRequestException(
-                    "Card product is already " + status.name().toLowerCase());
-        }
-
-        card.setStatus(status);
-        cardProductRepository.save(card);
-
-        return status.name();
-    }
-    
     /**
      * {@inheritDoc}
      *
@@ -291,7 +279,8 @@ public class CardProductServiceImpl implements CardProductService {
                 request.getEcommerceDailyLimit() == null &&
                 request.getStatementCycleDay() == null &&
                 request.getForexMarkupPercent() == null &&
-                request.getProductDescription() == null) {
+                request.getProductDescription() == null &&
+                request.getStatus() == null) {
 
             throw new BadRequestException(
                     "At least one field must be provided for update");

@@ -18,12 +18,15 @@ import com.example.repository.CustomerAddressRepository;
 import com.example.service.CustomerAddressService;
 import com.example.service.CustomerService;
 
+import lombok.RequiredArgsConstructor;
+
 /**
  * Implementation of {@link CustomerAddressService}.
  * Handles address persistence and cross-domain validation with the Customer service.
  */
-// SENIOR OPTIMIZATION: Default to read-only transactions to improve GET performance.
+
 @Service
+@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class CustomerAddressServiceImpl implements CustomerAddressService {
 
@@ -32,59 +35,50 @@ public class CustomerAddressServiceImpl implements CustomerAddressService {
     // Good Architecture: Injecting the domain service rather than the repository directly.
     private final CustomerService customerService;             
     private final CustomerAddressMapper addressMapper;
- 
-    public CustomerAddressServiceImpl(
-            CustomerAddressRepository addressRepository,
-            CustomerService customerService,
-            CustomerAddressMapper addressMapper) {
-        this.addressRepository = addressRepository;
-        this.customerService = customerService;
-        this.addressMapper = addressMapper;
-    }
 
     @Override
     @Transactional // Override for write operations
-    public String addAddress(UUID customerId, AddressCreateRequest request) {
+    public String addAddress(UUID userId, AddressCreateRequest request) {
 
-        Customer customer = customerService.getCustomer(customerId);
+        Customer customer = customerService.getCustomerByUserId(userId);
+
         CustomerAddress address = addressMapper.toEntity(request, customer);
-        
         addressRepository.save(address);
 
         return "Address created";
     }
 
     @Override
-    public List<AddressResponse> getAddresses(UUID customerId) {
-        
-        // Fail-fast domain validation
-        if (!customerService.customerExists(customerId)) {
-            throw new ResourceNotFoundException("Customer not found");
+    @Transactional // Override for write operations
+    public String deleteAddress(UUID userId, UUID addressId) {
+
+        Customer customer = customerService.getCustomerByUserId(userId);
+
+        CustomerAddress address = addressRepository.findById(addressId)
+                .orElseThrow(() -> new ResourceNotFoundException("Address not found"));
+
+        if (!address.getCustomer().getCustomerId().equals(customer.getCustomerId())) {
+            throw new AccessDeniedException("You do not have permission to delete this address");
         }
 
-        return addressRepository.findByCustomerCustomerId(customerId)
+        addressRepository.delete(address);
+
+        return "Address deleted";
+    }
+
+	@Override
+	 public List<AddressResponse> getAddresses(UUID userId) {
+
+        Customer customer = customerService.getCustomerByUserId(userId);
+
+        return addressRepository.findByCustomerCustomerId(customer.getCustomerId())
                 .stream()
                 .map(addressMapper::toResponse)
                 .collect(Collectors.toList());
     }
 
-    @Override
-    @Transactional // Override for write operations
-    public String deleteAddress(UUID customerId, UUID addressId) {
-
-        CustomerAddress address = addressRepository.findById(addressId)
-                .orElseThrow(() -> new ResourceNotFoundException("Address not found"));
-
-        // SECURITY ARCHITECTURE: Prevent IDOR attacks.
-        // Ensure the address being deleted actually belongs to the user making the request.
-        if (!address.getCustomer().getCustomerId().equals(customerId)) {
-            throw new AccessDeniedException("You do not have permission to delete this address");
-            // Alternatively, you can throw a ResourceNotFoundException here to completely 
-            // mask the existence of the address from attackers.
-        }
-
-        addressRepository.delete(address);
-
-        return "Address Deleted";
-    }
+	@Override
+	public boolean hasAddress(UUID customerId) {
+	    return addressRepository.existsByCustomerCustomerId(customerId);
+	}
 }

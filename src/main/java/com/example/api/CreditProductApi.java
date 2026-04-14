@@ -1,6 +1,7 @@
 package com.example.api;
 
 import java.util.List;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -10,9 +11,9 @@ import com.example.dto.request.CreditProductUpdateRequest;
 import com.example.dto.response.ApiResponse;
 import com.example.dto.response.CreditProductCreateResponse;
 import com.example.dto.response.CreditProductResponse;
-import com.example.enums.ProductStatus;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -20,93 +21,193 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import jakarta.validation.Valid;
 
-@Tag(name = "Credit Products")
+/**
+ * API contract for Credit Product management.
+ *
+ * <p>This API allows administrators to:
+ * <ul>
+ *     <li>Create credit products</li>
+ *     <li>View product details</li>
+ *     <li>List all products</li>
+ *     <li>Update product configuration</li>
+ * </ul>
+ *
+ * <p>Base URL: <b>/api/v1/credit-products</b>
+ *
+ * <p><b>Security:</b> All endpoints require ADMIN role.
+ *
+ * <p>All responses are wrapped in {@link ApiResponse}
+ */
+@Tag(name = "Credit Products", description = "APIs for managing credit products")
 @RequestMapping("/api/v1/credit-products")
 @PreAuthorize("hasRole('ADMIN')")
 public interface CreditProductApi {
 
+	/**
+	 * Create a new credit product.
+	 *
+	 * <p>Examples:
+	 * <ul>
+	 *     <li>Personal Loan</li>
+	 *     <li>Home Loan</li>
+	 *     <li>Auto Loan</li>
+	 * </ul>
+	 *
+	 * @param request credit product creation request
+	 * @return created product response
+	 */
+	@Operation(
+			summary = "Create new credit product",
+			description = """
+                Creates a new credit product.
 
-    // CREATE PRODUCT
-    @Operation(summary = "Create new credit product(Admin)")
-    @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "201",
-                    description = "Product created successfully",
-                    content = @Content(
-                            schema = @Schema(implementation = CreditProductResponse.class)
-                    )
-            ),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "400",
-                    description = "Invalid request"
-            ),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "403",
-                    description = "Access denied"
-            )
-    })
-    @PostMapping
-    ResponseEntity<ApiResponse<CreditProductCreateResponse>> create(
-            @Valid @RequestBody CreditProductCreateRequest request
-    );
+                🔒 Requires ADMIN role.
 
-    // =====================================================
-    // GET SPECIFIC PRODUCT
-    // =====================================================
-    @Operation(summary = "Get product by ID")
-    @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "200",
-                    description = "Product fetched successfully"
-            ),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "404",
-                    description = "Product not found"
-            )
-    })
-    @GetMapping("/{id}")
-    ResponseEntity<ApiResponse<CreditProductResponse>> getById(
-            @PathVariable Long id
-    );
+                Example:
+                - Personal Loan
+                - Interest Rate: 10%-18%
+                - Status: ACTIVE
+                """
+	)
+	@ApiResponses(value = {
+			@io.swagger.v3.oas.annotations.responses.ApiResponse(
+					responseCode = "201",
+					description = "Product created successfully",
+					content = @Content(
+							schema = @Schema(implementation = CreditProductCreateResponse.class)
+					)
+			),
+			@io.swagger.v3.oas.annotations.responses.ApiResponse(
+					responseCode = "400",
+					description = "Invalid request"
+			),
+			@io.swagger.v3.oas.annotations.responses.ApiResponse(
+					responseCode = "403",
+					description = "Access denied"
+			)
+	})
+	@PostMapping
+	ResponseEntity<ApiResponse<CreditProductCreateResponse>> create(
 
-    // GET ALL ACTIVE PRODUCTS
-    @Operation(summary = "Get all active credit products")
-    @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "200",
-                    description = "Products fetched successfully"
-            )
-    })
-    @GetMapping
-    ResponseEntity<ApiResponse<List<CreditProductResponse>>> getAll();
+			@io.swagger.v3.oas.annotations.parameters.RequestBody(
+					description = "Credit product creation request",
+					required = true,
+					content = @Content(
+							schema = @Schema(implementation = CreditProductCreateRequest.class)
+					)
+			)
+			@Valid @RequestBody CreditProductCreateRequest request
+	);
 
+	/**
+	 * Fetch a credit product by ID.
+	 *
+	 * @param id credit product ID
+	 * @return credit product details
+	 */
+	@Operation(
+			summary = "Get credit product by ID",
+			description = "Fetch a specific credit product using its unique identifier"
+	)
+	@ApiResponses(value = {
+			@io.swagger.v3.oas.annotations.responses.ApiResponse(
+					responseCode = "200",
+					description = "Product fetched successfully"
+			),
+			@io.swagger.v3.oas.annotations.responses.ApiResponse(
+					responseCode = "404",
+					description = "Product not found"
+			)
+	})
+	@GetMapping("/{id}")
+	ResponseEntity<ApiResponse<CreditProductResponse>> getById(
 
-    // UPDATE PRODUCT
-    @Operation(summary = "Update credit product(Admin)")
-    @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "200",
-                    description = "Product updated successfully"
-            ),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "404",
-                    description = "Product not found"
-            )
-    })
-    
-    @PutMapping("/{id}")
-    ResponseEntity<ApiResponse<CreditProductResponse>> update(
-            @PathVariable Long id,
-            @Valid @RequestBody CreditProductUpdateRequest request
-    );
-    
-    
-    // Update Status
-    @Operation(summary = "Activate or deactivate credit product(Admin)")
-    @PatchMapping("/{id}")
-    ResponseEntity<ApiResponse<String>> updateStatus(
-            @PathVariable Long id,
-            @Valid @RequestParam ProductStatus status
-    );
+			@Parameter(
+					description = "Unique ID of the credit product",
+					example = "101",
+					required = true
+			)
+			@PathVariable Long id
+	);
+
+	/**
+	 * Fetch all credit products.
+	 *
+	 * <p>By default, active products are returned.
+	 *
+	 * @return list of credit products
+	 */
+	@Operation(
+			summary = "Get all credit products",
+			description = "Fetch all available credit products (default: ACTIVE)"
+	)
+	@ApiResponses(value = {
+			@io.swagger.v3.oas.annotations.responses.ApiResponse(
+					responseCode = "200",
+					description = "Products fetched successfully"
+			)
+	})
+	@GetMapping
+	ResponseEntity<ApiResponse<List<CreditProductResponse>>> getAll();
+
+	/**
+	 * Update an existing credit product.
+	 *
+	 * <p>Supports partial updates.
+	 *
+	 * <p>Example:
+	 * <pre>
+	 * {
+	 *   "status": "INACTIVE"
+	 * }
+	 * </pre>
+	 *
+	 * @param id credit product ID
+	 * @param request update request payload
+	 * @return updated product details
+	 */
+	@Operation(
+			summary = "Update credit product",
+			description = """
+                Updates an existing credit product.
+
+                ✔ Partial updates supported
+                ✔ Example: only status update
+
+                {
+                  "status": "INACTIVE"
+                }
+
+                🔒 Requires ADMIN role.
+                """
+	)
+	@ApiResponses(value = {
+			@io.swagger.v3.oas.annotations.responses.ApiResponse(
+					responseCode = "200",
+					description = "Product updated successfully"
+			),
+			@io.swagger.v3.oas.annotations.responses.ApiResponse(
+					responseCode = "404",
+					description = "Product not found"
+			)
+	})
+	@PutMapping("/{id}")
+	ResponseEntity<ApiResponse<CreditProductResponse>> update(
+
+			@Parameter(
+					description = "Credit product ID",
+					example = "1",
+					required = true
+			)
+			@PathVariable Long id,
+
+			@io.swagger.v3.oas.annotations.parameters.RequestBody(
+					description = "Updated credit product details",
+					required = true,
+					content = @Content(
+							schema = @Schema(implementation = CreditProductUpdateRequest.class)
+					)
+			)
+			@Valid @RequestBody CreditProductUpdateRequest request
+	);
 }
-

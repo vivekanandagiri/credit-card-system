@@ -2,70 +2,126 @@ package com.example.repository;
 
 import com.example.entity.Transaction;
 import com.example.enums.TransactionChannel;
-import com.example.enums.TransactionStatus;
 import com.example.enums.TransactionType;
+
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
-public interface TransactionRepository extends JpaRepository<Transaction, UUID> {
+public interface TransactionRepository extends JpaRepository<Transaction, UUID>,JpaSpecificationExecutor<Transaction> {
 
-    // Customer — all transactions on their account (newest first)
+    // 1. CUSTOMER QUERIES
+
     List<Transaction> findAllByAccountAccountIdOrderByTransactionTimeDesc(UUID accountId);
 
-    // DYNAMIC FILTER (CUSTOM QUERY)
+//    // Dynamic filter (Customer)
+    /**
+     * facing some Null issue so i am not using this 
+     */
+//    @Query("""
+//    	    SELECT t
+//    	    FROM Transaction t
+//    	    WHERE t.account.accountId = :accountId
+//    	      AND (:status IS NULL OR t.transactionStatus = :status)
+//    	      AND (:type IS NULL OR t.transactionType = :type)
+//    	      AND (:cardId IS NULL OR t.card.cardId = :cardId)
+//    	""")
+//    	Page<Transaction> findByFilters(
+//    	        @Param("accountId") UUID accountId,
+//    	        @Param("status") TransactionStatus status,
+//    	        @Param("type") TransactionType type,
+//    	        @Param("cardId") UUID cardId,
+//    	        Pageable pageable
+//    	);
+
+
+    // 3. DAILY LIMIT CHECK
+
     @Query("""
-    	    SELECT t FROM Transaction t
-    	    WHERE t.account.accountId = :accountId
-    	    AND (COALESCE(:status, t.transactionStatus) = t.transactionStatus)
-    	    AND (COALESCE(:type, t.transactionType) = t.transactionType)
-    	    AND (COALESCE(:cardId, t.card.cardId) = t.card.cardId)
-    	    ORDER BY t.transactionTime DESC
-    	""")
-    	List<Transaction> findByFilters(
-    	        @Param("accountId") UUID accountId,
-    	        @Param("status") TransactionStatus status,
-    	        @Param("type") TransactionType type,
-    	        @Param("cardId") UUID cardId
-    	);
-    // Global Filter(ADMIN)Custom Query
-    @Query("""
-    	    SELECT t FROM Transaction t
-    	    WHERE (COALESCE(:status, t.transactionStatus) = t.transactionStatus)
-    	    AND (COALESCE(:type, t.transactionType) = t.transactionType)
-    	    AND (COALESCE(:accountId, t.account.accountId) = t.account.accountId)
-    	    AND (COALESCE(:userId, t.account.customer.user.userId) = t.account.customer.user.userId)
-    	    ORDER BY t.transactionTime DESC
-    	""")
-    	List<Transaction> findAllWithFilters(
-    	        @Param("status") TransactionStatus status,
-    	        @Param("type") TransactionType type,
-    	        @Param("accountId") UUID accountId,
-    	        @Param("userId") UUID userId
-    	);
-    // ── Daily limit check ──
-    // Sum of APPROVED transaction amounts for a specific card,
-    // of a given type, from a given time (start of today) onwards.
-    // Used to enforce posDailyLimit (PURCHASE) and ecommerceDailyLimit (ONLINE).
-    
-    @Query("""
-            SELECT COALESCE(SUM(t.amount), 0)
-            FROM Transaction t
-            WHERE t.card.cardId         = :cardId
-              AND t.transactionType     = :type
-              AND t.transactionChannel  = :channel
-              AND t.transactionStatus   = 'APPROVED'
-              AND t.transactionTime    >= :from
-            """)
+        SELECT COALESCE(SUM(t.amount), 0)
+        FROM Transaction t
+        WHERE t.card.cardId         = :cardId
+          AND t.transactionType     = :type
+          AND t.transactionChannel  = :channel
+          AND t.transactionStatus   = 'APPROVED'
+          AND t.transactionTime    >= :from
+    """)
     BigDecimal sumApprovedAmountByCardAndTypeAndChannelAfter(
             @Param("cardId") UUID cardId,
             @Param("type") TransactionType type,
             @Param("channel") TransactionChannel channel,
             @Param("from") Instant from
     );
+
+    // 4. BILLING SUPPORT 
+
+    @Query("""
+        SELECT COALESCE(SUM(
+            CASE 
+                WHEN t.transactionType IN ('PURCHASE','FEE','INTEREST') THEN t.amount
+                WHEN t.transactionType IN ('PAYMENT','REFUND') THEN -t.amount
+            END
+        ), 0)
+        FROM Transaction t
+        WHERE t.account.accountId = :accountId
+          AND t.transactionStatus = 'APPROVED'
+          AND t.transactionTime BETWEEN :start AND :end
+    """)
+    BigDecimal sumNetTransactionsForPeriod(
+            @Param("accountId") UUID accountId,
+            @Param("start") Instant start,
+            @Param("end") Instant end
+    );
+
+    @Query("""
+    		SELECT COALESCE(SUM(t.amount), 0)
+    		FROM Transaction t
+    		WHERE t.account.accountId = :accountId
+    		  AND t.transactionStatus = 'APPROVED'
+    		  AND t.transactionType IN ('PURCHASE','FEE','INTEREST')
+    		  AND t.transactionTime >= :start AND t.transactionTime < :end
+    		""")
+    	BigDecimal sumDebitsForPeriod(@Param("accountId") UUID accountId,
+    	                               @Param("start") Instant start,
+    	                               @Param("end") Instant end);
+
+    @Query("""
+    		SELECT COALESCE(SUM(t.amount), 0)
+    		FROM Transaction t
+    		WHERE t.account.accountId = :accountId
+    		  AND t.transactionStatus = 'APPROVED'
+    		  AND t.transactionType IN ('PAYMENT','REFUND')
+    		  AND t.transactionTime >= :start AND t.transactionTime < :end
+    		""")
+    	BigDecimal sumCreditsForPeriod(@Param("accountId") UUID accountId,
+    	                                @Param("start") Instant start,
+    	                                @Param("end") Instant end);
+
+    
+    //intrest
+    @Query("""
+    	    SELECT t FROM Transaction t
+    	    WHERE t.account.accountId = :accountId
+    	    AND t.transactionTime >= :start
+    	    AND t.transactionTime < :end
+    	    AND t.transactionType = :type
+    	    ORDER BY t.transactionTime ASC
+    	""")
+    	List<Transaction> findTransactionsForInterest(
+    	        @Param("accountId") UUID accountId,
+    	        @Param("start") Instant start,
+    	        @Param("end") Instant end,
+    	        @Param("type") TransactionType type
+    	);
+
+	Optional<Transaction> findByTransactionReference(String transactionReference);
+
+	Optional<Transaction> findByReferenceNumber(String reference);
 }

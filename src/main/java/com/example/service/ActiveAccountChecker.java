@@ -5,17 +5,17 @@ import java.util.UUID;
 /**
  * Contract for checking whether a customer already holds
  * an active card for a given card product.
- *
+ * <p>
  * Used in Gate 8 of CreditCardApplicationServiceImpl
  * to block re-application when a live card already exists.
- *
+ * <p>
  * TWO IMPLEMENTATIONS:
- *
+ * <p>
  * 1. NoOpActiveCardChecker (active now)
  *    — Used until the card issuance module is built.
  *    — Always returns false (no cards exist yet).
  *    — Registered as @Primary so Spring picks it automatically.
- *
+ * <p>
  * 2. IssuedCardActiveCardChecker (wire when card module is ready)
  *    — Queries the issued_cards table via IssuedCardRepository.
  *    — Remove @Primary from NoOpActiveCardChecker and add it here.

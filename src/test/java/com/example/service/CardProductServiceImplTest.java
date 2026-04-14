@@ -163,31 +163,6 @@ class CardProductServiceImplTest {
         }
     }
 
-    // ---------------- UPDATE STATUS ----------------
-    @Nested
-    class UpdateStatusTests {
-
-        @Test
-        void shouldUpdateStatusSuccessfully() {
-            entity.setStatus(ProductStatus.INACTIVE);
-            when(repository.findById(id)).thenReturn(Optional.of(entity));
-
-            String result =
-                    service.updateStatus(id, ProductStatus.ACTIVE);
-
-            assertThat(result).isEqualTo("ACTIVE");
-            verify(repository).save(entity);
-        }
-
-        @Test
-        void shouldThrowException_whenSameStatus() {
-            entity.setStatus(ProductStatus.ACTIVE);
-            when(repository.findById(id)).thenReturn(Optional.of(entity));
-
-            assertThrows(BadRequestException.class,
-                    () -> service.updateStatus(id, ProductStatus.ACTIVE));
-        }
-    }
 
     // ---------------- GET ACTIVE ENTITY ----------------
     @Nested

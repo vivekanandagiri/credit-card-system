@@ -4,8 +4,11 @@ import com.example.dto.request.CreditAccountStatusUpdateRequest;
 import com.example.dto.response.CreditAccountResponse;
 import com.example.entity.CreditAccount;
 import com.example.entity.CreditCardApplication;
+import com.example.enums.AccountStatus;
+import com.example.enums.UserRole;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -15,10 +18,10 @@ public interface CreditAccountService {
 	CreditAccountResponse createAccount(CreditCardApplication application);
 
 	// Get Accounts
-    List<CreditAccountResponse> getAccounts(UUID userId, String role, String status);
+    List<CreditAccountResponse> getAccounts(UUID userId, UserRole userRole, AccountStatus status);
 
 	// Customer end points
-    CreditAccountResponse getAccountById(UUID userId, String role, UUID accountId);
+    CreditAccountResponse getAccountById(UUID userId, UserRole role, UUID accountId);
 
 	// Admin endpoints
 	// ApiResponse<List<CreditAccountResponse>> getAllAccounts();
@@ -60,4 +63,17 @@ public interface CreditAccountService {
 	void deductBalance(UUID accountId, BigDecimal amount);
 
 	void addBalance(UUID accountId, BigDecimal amount);
+	void updateAccountAfterBilling(
+	        UUID accountId,
+	        Instant lastStatementDate,
+	        BigDecimal lastStatementBalance,
+	        Instant nextDueDate,
+	        BigDecimal minimumDueAmount
+	);
+	// Method for Payment Service 
+	void applyPayment(UUID accountId, BigDecimal amount,Instant paidAt);
+
+	CreditAccount getAccount(UUID accountId);
+
+	CreditAccount getAccountForUpdate(UUID accountId);
 }

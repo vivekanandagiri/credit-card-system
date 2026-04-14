@@ -37,6 +37,7 @@ public class CustomerServiceImpl implements CustomerService {
 
     @Override
     public Customer saveCustomer(Customer customer) {
+    	customer.setTimezone("Asia/Kolkata"); //For now default timezone is Asia/Kolkata
         return customerRepository.save(customer);
     }
 

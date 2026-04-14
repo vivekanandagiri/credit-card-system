@@ -2,7 +2,6 @@ package com.example.service.ServiceImpl;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -15,9 +14,12 @@ import com.example.dto.request.CreditAccountStatusUpdateRequest;
 import com.example.dto.response.CreditAccountResponse;
 import com.example.entity.CreditAccount;
 import com.example.entity.CreditCardApplication;
+import com.example.entity.CreditProduct;
 import com.example.entity.Customer;
 import com.example.enums.AccountStatus;
 import com.example.enums.ApplicationStatus;
+import com.example.enums.UserRole;
+import com.example.exception.BadRequestException;
 import com.example.exception.BusinessRuleException;
 import com.example.exception.ConflictException;
 import com.example.exception.ResourceNotFoundException;
@@ -26,6 +28,8 @@ import com.example.repository.CreditAccountRepository;
 import com.example.service.CreditAccountService;
 import com.example.service.CustomerService;
 import com.example.util.AccountNumberGenerator;
+
+import lombok.extern.slf4j.Slf4j;
 
 
 /**
@@ -41,6 +45,7 @@ import com.example.util.AccountNumberGenerator;
  */
 @Service
 @Transactional
+@Slf4j
 public class CreditAccountServiceImpl implements CreditAccountService {
 	
 	
@@ -108,23 +113,27 @@ public class CreditAccountServiceImpl implements CreditAccountService {
 	@Transactional(readOnly = true)
 	public List<CreditAccountResponse> getAccounts(
 	        UUID userId,
-	        String role,
-	        String status) {
+	        UserRole role,
+	        AccountStatus status) {
 
 	    List<CreditAccount> accounts;
 
-	    if ("CUSTOMER".equals(role)) {
+	    if (role == UserRole.CUSTOMER) {
 
 	        Customer customer = customerService.getCustomerByUserId(userId);
 
-	        accounts = accountRepository
-	                .findAllByCustomerCustomerId(customer.getCustomerId());
-
+	        if (status != null) {
+                accounts = accountRepository
+                        .findAllByCustomerCustomerIdAndAccountStatus(
+                                customer.getCustomerId(), status);
+            } else {
+                accounts = accountRepository
+                        .findAllByCustomerCustomerId(customer.getCustomerId());
+            }
 	    } else { // ADMIN
 
 	        if (status != null) {
-	            AccountStatus accountStatus = parseAccountStatus(status);
-	            accounts = accountRepository.findAllByAccountStatus(accountStatus);
+	            accounts = accountRepository.findAllByAccountStatus(status);
 	        } else {
 	            accounts = accountRepository.findAll();
 	        }
@@ -143,13 +152,13 @@ public class CreditAccountServiceImpl implements CreditAccountService {
 	@Override
 	public CreditAccountResponse getAccountById(
 	        UUID userId,
-	        String role,
+	        UserRole role,
 	        UUID accountId) {
 
 	    CreditAccount creditAccount = findAccountById(accountId);
 
 	    // Authorization check only for CUSTOMER
-	    if ("CUSTOMER".equals(role)) {
+	    if (role == UserRole.CUSTOMER) {
 	        Customer customer = customerService.getCustomerByUserId(userId);
 
 	        if (!creditAccount.getCustomer().getCustomerId()
@@ -172,8 +181,11 @@ public class CreditAccountServiceImpl implements CreditAccountService {
 	public CreditAccountResponse updateAccountStatus(UUID accountId,
 			CreditAccountStatusUpdateRequest request) {
 		CreditAccount account = findAccountById(accountId);
-        AccountStatus newAccountStatus = parseAccountStatus(request.getStatus());
+        AccountStatus newAccountStatus =request.getStatus();
         
+        if (newAccountStatus == null) {
+            throw new BusinessRuleException("Account status must not be null");
+        }
         //validate transition rules 
         validateStatusTransition(account.getAccountStatus(), newAccountStatus);
         
@@ -292,12 +304,61 @@ public class CreditAccountServiceImpl implements CreditAccountService {
 	        newCurrentBalance = BigDecimal.ZERO;
 	    }
 	    
+	    creditAccount.setAvailableBalance(newAvailable);
+	    creditAccount.setCurrentBalance(newCurrentBalance);
 	    creditAccount.setLastPaymentAmount(amount);
 	    creditAccount.setLastPaymentDate(Instant.now());
 
 	    accountRepository.save(creditAccount);
 
 	 }
+    @Override
+    @Transactional
+    public void applyPayment(UUID accountId, BigDecimal amount,Instant paidAt) {
+
+        CreditAccount account = getAccountEntity(accountId);
+
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BadRequestException("Invalid payment amount");
+        }
+
+        BigDecimal currentBalance = account.getCurrentBalance() != null
+                ? account.getCurrentBalance()
+                : BigDecimal.ZERO;
+
+        // Reduce outstanding balance
+        BigDecimal newBalance = currentBalance.subtract(amount);
+
+        account.setCurrentBalance(newBalance);
+
+        //  Handle credit balance (over payment)
+        if (newBalance.compareTo(BigDecimal.ZERO) < 0) {
+            log.info("Account {} now has credit balance: {}", accountId, newBalance);
+        }
+
+        // Recalculate available credit
+        BigDecimal creditLimit = account.getCreditLimit();
+        BigDecimal availableCredit = creditLimit.subtract(newBalance);
+
+        account.setAvailableBalance(availableCredit);
+        account.setLastPaymentAmount(amount);
+        account.setLastPaymentDate(paidAt);
+        
+        accountRepository.save(account);
+
+        log.info("Account payment applied | accountId={} | amount={} | newBalance={} | availableCredit={}",
+                accountId, amount, newBalance,availableCredit);
+    }
+    
+    //Used in Payment Service 
+    @Override
+    @Transactional(readOnly = true)
+    public CreditAccount getAccount(UUID accountId) {
+
+        return accountRepository.findById(accountId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Credit account not found"));
+    }
     
 	//-----------------Helper method------------------------------ 
 	/**
@@ -319,6 +380,7 @@ public class CreditAccountServiceImpl implements CreditAccountService {
 	 */
     private CreditAccount buildCreditAccount(CreditCardApplication application, String accountNumber) {
     	//Build Account entity
+    	CreditProduct product = application.getCreditProduct();
         CreditAccount account = new CreditAccount();
         account.setAccountNumber(accountNumber);
         account.setCustomer(application.getCustomer());
@@ -328,9 +390,14 @@ public class CreditAccountServiceImpl implements CreditAccountService {
         //Credit terms -from application
         account.setCreditLimit(application.getApprovedCreditLimit());
         account.setApr(application.getApprovedApr());
+        account.setGracePeriodDays(product.getGracePeriodDays());
+        account.setMinimumDuePercent(product.getMinimumDuePercent());
+        account.setLateFeeAmount(product.getLateFeeAmount());
+        //Financial state
         account.setCurrentBalance(BigDecimal.ZERO);
         account.setAvailableBalance(application.getApprovedCreditLimit());
-        account.setMinimumDueAmount(BigDecimal.ZERO);
+        //
+        //account.setMinimumDueAmount(BigDecimal.ZERO);
         account.setStatementCycleDay(DEFAULT_STATEMENT_CYCLE_DAY);
         account.setLastStatementDate(null);
         account.setLastStatementBalance(null);
@@ -341,16 +408,7 @@ public class CreditAccountServiceImpl implements CreditAccountService {
         return account;
     }
     
-	private AccountStatus parseAccountStatus(String status) {
-        try {
-            return AccountStatus.valueOf(status.toUpperCase().trim());
-        } catch (IllegalArgumentException e) {
-            throw new BusinessRuleException(
-                    "Invalid account status: '" + status
-                            + "'. Valid values: "
-                            + Arrays.toString(AccountStatus.values()));
-        }
-    }
+
 	/**
 	 * Validate account is active or not and Prevent operation on closed account
 	 * @param account
@@ -365,20 +423,15 @@ public class CreditAccountServiceImpl implements CreditAccountService {
 	}
 	
 	/**
-     * Valid status transitions:
+	 * * Valid status transitions:
      *
      * ACTIVE    → SUSPENDED, BLOCKED, CLOSED
      * SUSPENDED → ACTIVE, BLOCKED, CLOSED
      * BLOCKED   → ACTIVE, CLOSED          (admin can unblock or close)
      * CLOSED    → (no transitions allowed — terminal state)
-     *//**
-     * Valid status transitions:
-    *
-    * ACTIVE    → SUSPENDED, BLOCKED, CLOSED
-    * SUSPENDED → ACTIVE, BLOCKED, CLOSED
-    * BLOCKED   → ACTIVE, CLOSED          (admin can unblock or close)
-    * CLOSED    → (no transitions allowed — terminal state)
-    */
+	 * @param current
+	 * @param next
+	 */
 	private void validateStatusTransition(AccountStatus current, AccountStatus next) {
 
         if (current == next) {
@@ -392,4 +445,29 @@ public class CreditAccountServiceImpl implements CreditAccountService {
                             + "It is a terminal state.");
         }
     }
+
+	@Override
+	@Transactional
+	public void updateAccountAfterBilling(
+	        UUID accountId,
+	        Instant lastStatementDate,
+	        BigDecimal lastStatementBalance,
+	        Instant nextDueDate,
+	        BigDecimal minimumDueAmount) {
+
+	    CreditAccount account = getAccountEntity(accountId);
+
+	    account.setLastStatementDate(lastStatementDate);
+	    account.setLastStatementBalance(lastStatementBalance);
+	    account.setNextDueDate(nextDueDate);
+	    accountRepository.save(account);
+	}
+
+	@Override
+	@Transactional(readOnly = true)
+	public CreditAccount getAccountForUpdate(UUID accountId) {
+	    return accountRepository.findByIdForUpdate(accountId)
+	            .orElseThrow(() ->
+	                    new ResourceNotFoundException("Credit Account not found"));
+	}
 }

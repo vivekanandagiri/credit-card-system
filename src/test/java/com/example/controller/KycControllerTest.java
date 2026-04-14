@@ -1,5 +1,7 @@
 package com.example.controller;
 
+import com.example.config.TimezoneInterceptor;
+import com.example.config.WebConfig;
 import com.example.dto.request.KycStatusUpdateRequest;
 import com.example.dto.response.KycResponse;
 import com.example.enums.KycStatus;
@@ -41,10 +43,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(
         controllers = KycController.class,
         excludeAutoConfiguration = SecurityAutoConfiguration.class,
-        excludeFilters = @Filter(
-                type = FilterType.ASSIGNABLE_TYPE,
-                classes = JwtFilter.class
-        )
+        		excludeFilters = { 
+        				@Filter(type = FilterType.ASSIGNABLE_TYPE,classes = JwtFilter.class),
+        				@Filter(type = FilterType.ASSIGNABLE_TYPE,classes = TimezoneInterceptor.class),
+        				@Filter(type = FilterType.ASSIGNABLE_TYPE,classes = WebConfig.class)
+        	}
 )
 @AutoConfigureMockMvc(addFilters = false)
 class KycControllerTest {
@@ -122,7 +125,7 @@ class KycControllerTest {
         Mockito.when(kycService.getKycStatus(any()))
                 .thenReturn(kyc);
 
-        mockMvc.perform(get("/api/v1/kyc/")
+        mockMvc.perform(get("/api/v1/kyc")
                 .with(authentication(
                         new UsernamePasswordAuthenticationToken(principal(), null)
                 )))

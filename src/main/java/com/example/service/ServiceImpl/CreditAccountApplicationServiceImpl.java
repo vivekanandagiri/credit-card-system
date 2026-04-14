@@ -32,9 +32,24 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+
 /**
+ * Service implementation for managing credit card applications.
  * Implementation of {@link CreditAccountApplicationService}.
  *
+ * <p>This class handles the complete lifecycle of a credit card application:
+ * validation, underwriting decisioning, persistence, and account creation.</p>
+ *
+ * <p>Key responsibilities:</p>
+ * <ul>
+ *     <li>Validating customer eligibility (KYC, credit score, duplicates, limits)</li>
+ *     <li>Processing application submission</li>
+ *     <li>Interfacing with underwriting engine</li>
+ *     <li>Handling manual and automatic decisions</li>
+ *     <li>Creating credit accounts upon approval</li>
+ * </ul>
+ *
+ * <p>Transactional boundaries are managed at the service level.</p>
  */
 @Service
 @Transactional
@@ -44,10 +59,15 @@ public class CreditAccountApplicationServiceImpl implements CreditAccountApplica
     private static final int MAX_ACTIVE_APPLICATIONS = 3;
     // Cool down period in days after rejection before re-applying for same product
     private static final int REJECTION_COOLDOWN_DAYS = 30;
-    
+    /**
+     * Minimum allowed credit score.
+     * Maximum allowed credit score.
+     */
     private static final int CREDIT_SCORE_MIN = 300;
     private static final int CREDIT_SCORE_MAX = 900;
     
+    // List of application statuses considered as "active".
+
     private static final List<ApplicationStatus> ACTIVE_APPLICATION_STATUSES = List.of(
             ApplicationStatus.SUBMITTED,
             ApplicationStatus.UNDER_REVIEW,
@@ -62,6 +82,18 @@ public class CreditAccountApplicationServiceImpl implements CreditAccountApplica
     private final UnderwritingService underwritingService;
     private final CreditAccountApplicationMapper applicationMapper;
  
+    /**
+     * Constructs the service with required dependencies.
+     *
+     * @param applicationRepository repository for application persistence
+     * @param customerService       service to fetch customer details
+     * @param kycService            service to verify KYC status
+     * @param creditProductService  service to fetch credit product details
+     * @param creditAccountService  service to create credit accounts
+     * @param activeAccountChecker  service to check existing active accounts
+     * @param underwritingService   service to evaluate credit risk
+     * @param applicationMapper     mapper for entity ↔ DTO conversion
+     */
     public CreditAccountApplicationServiceImpl(
             CreditCardApplicationRepository applicationRepository,
             CustomerService customerService,
@@ -82,15 +114,23 @@ public class CreditAccountApplicationServiceImpl implements CreditAccountApplica
     }
 
 
-	/**
-	 * CREATE APPLICATION
-	 */
+    /**
+     * Submits a new credit card application.
+     *
+     * <p>Performs multiple validations including KYC, credit score, duplicate applications,
+     * and business rules before sending the application for underwriting.</p>
+     *
+     * <p>If auto-approved, a credit account is created immediately.</p>
+     *
+     * @param userId  the user ID of the applicant
+     * @param request the application request payload
+     * @return summary response of the created application
+     */
 	@Override
 	public CreditCardApplicationSummaryResponse apply(UUID userId, CreditCardApplicationRequest request) {
 		// 1. User and Profile check
 		Customer customer = customerService.getCustomerByUserId(userId);
-		
-		// 4. KYC check
+		// 2. KYC check
 		validateKycApproved(customer.getCustomerId());
 		// 3.Credit product validation check
 		CreditProduct creditProduct = creditProductService.getActiveCreditProduct(request.getCreditProductId());
@@ -127,10 +167,12 @@ public class CreditAccountApplicationServiceImpl implements CreditAccountApplica
         return applicationMapper.toSummaryResponse(saved);
 	}
 
-	/**
-	 *  GET Customer  Application
-	 */
-
+	 /**
+     * Retrieves all applications for a given user.
+     *
+     * @param userId user identifier
+     * @return list of application summaries
+     */
 	@Override
 	@Transactional(readOnly = true)
 	public List<CreditCardApplicationSummaryResponse> getCustomerApplications(UUID userId) {
@@ -144,9 +186,13 @@ public class CreditAccountApplicationServiceImpl implements CreditAccountApplica
 		return list;
 	}
 	
-	/*
-	 * Get application by status(Customer)
-	 */
+	/**
+     * Retrieves applications filtered by status for a customer.
+     *
+     * @param userId user identifier
+     * @param status application status (string)
+     * @return filtered list of applications
+     */
 	@Override
 	@Transactional(readOnly = true)
 	public List<CreditCardApplicationSummaryResponse> getCustomerApplicationsByStatus(
@@ -166,8 +212,13 @@ public class CreditAccountApplicationServiceImpl implements CreditAccountApplica
 	}
 
 	/**
-	 *  GET CUSTOMER APPLICATION BY ID
-	 */
+     * Retrieves a specific application belonging to a customer.
+     *
+     * @param customerId    customer ID
+     * @param applicationId application ID
+     * @return application details
+     * @throws AccessDeniedException if application does not belong to the customer
+     */
 	@Override
 	@Transactional(readOnly = true)
 	public CreditCardApplicationResponse getCustomerApplicationById(UUID customerId, UUID applicationId) {
@@ -182,9 +233,12 @@ public class CreditAccountApplicationServiceImpl implements CreditAccountApplica
 		return applicationMapper.toResponse(application);
 	}
 	
-	/**
-	 * GET Application By Id 
-	 */
+	 /**
+     * Retrieves an application by ID (admin/internal use).
+     *
+     * @param applicationId application ID
+     * @return application details
+     */
 	@Override
 	@Transactional(readOnly = true)
 	public CreditCardApplicationResponse getApplicationById(UUID applicationId) {
@@ -194,8 +248,10 @@ public class CreditAccountApplicationServiceImpl implements CreditAccountApplica
 	}
 
 	/**
-	 *  GET ALL APPLICATIONS (Admin)
-	 */
+     * Retrieves all applications (admin).
+     *
+     * @return list of all application summaries
+     */
 	@Override
 	@Transactional(readOnly = true)
 	public List<CreditCardApplicationSummaryResponse> getAllApplications() {
@@ -207,8 +263,11 @@ public class CreditAccountApplicationServiceImpl implements CreditAccountApplica
 	}
 
 	/**
-	 *  GET APPLICATIONS BY STATUS (Admin)
-	 */
+     * Retrieves applications filtered by status (admin).
+     *
+     * @param status application status
+     * @return filtered list
+     */
 	@Override
 	@Transactional(readOnly = true)
 	public List<CreditCardApplicationSummaryResponse> getApplicationsByStatus(String status) {
@@ -223,8 +282,14 @@ public class CreditAccountApplicationServiceImpl implements CreditAccountApplica
 
 	
 	/**
-	 *  MANUAL DECISION (Admin — PENDING_REVIEW only)
-	 */
+	 * Performs manual decision on an application (admin only).
+     *
+     * <p>Only applications in {@code PENDING_REVIEW} state can be manually decided.</p>
+     *
+     * @param applicationId application ID
+     * @param request       decision request
+     * @return updated application response
+     */
 	@Override
 	public CreditCardApplicationResponse decide(UUID applicationId, ApplicationDecisionRequest request) {
 
@@ -249,8 +314,10 @@ public class CreditAccountApplicationServiceImpl implements CreditAccountApplica
 	
 	// Private Helpers Methods
 	//---------------------------------------------------------------------------
-    // 1. Private helpers — validation
  
+	 /**
+     * Validates whether KYC is approved for the customer.
+     */
     private void validateKycApproved(UUID customerId) {
         // Delegates to KycService — no direct kycRepository access
         if (!kycService.isKycVerified(customerId)) {
@@ -258,6 +325,9 @@ public class CreditAccountApplicationServiceImpl implements CreditAccountApplica
         }
     }
  
+    /**
+     * Validates the credit score range.
+     */
     private void validateCreditScore(int score) {
         if (score < CREDIT_SCORE_MIN || score > CREDIT_SCORE_MAX) {
             throw new BusinessRuleException(
@@ -265,6 +335,9 @@ public class CreditAccountApplicationServiceImpl implements CreditAccountApplica
         }
     }
  
+    /**
+     * Fetches application by ID or throws exception if not found.
+     */
     private void validateNoDuplicateActiveApplication(Customer customer, CreditProduct creditProduct) {
         boolean exists = applicationRepository
                 .existsByCustomerCustomerIdAndCreditProductCreditProductIdAndApplicationStatusIn(
@@ -379,7 +452,10 @@ public class CreditAccountApplicationServiceImpl implements CreditAccountApplica
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Application with id " + applicationId + " not found"));
     }
- 
+    
+    /**
+     * Parses string status to enum safely.
+     */
     private ApplicationStatus parseApplicationStatus(String status) {
         try {
             return ApplicationStatus.valueOf(status.toUpperCase());

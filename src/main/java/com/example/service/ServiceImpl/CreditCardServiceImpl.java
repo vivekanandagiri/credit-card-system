@@ -3,7 +3,7 @@ package com.example.service.ServiceImpl;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -15,7 +15,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.example.dto.request.CreditCardIssuanceRequest;
 import com.example.dto.request.CreditCardStatusUpdateRequest;
-import com.example.dto.response.CardProductResponse;
 import com.example.dto.response.CreditCardIssuanceResponse;
 import com.example.dto.response.CreditCardResponse;
 import com.example.entity.CreditAccount;
@@ -36,29 +35,47 @@ import com.example.security.CustomUserPrincipal;
 import com.example.service.CardProductService;
 import com.example.service.CreditAccountService;
 import com.example.service.CreditCardService;
+import com.example.service.CustomerAddressService;
 import com.example.service.CustomerService;
 import com.example.service.UserService;
 import com.example.util.MaskedCardNumberGenerator;
 
 /**
+ * Service responsible for managing credit card lifecycle operations.
  * Implementation of {@link CreditCardService}.
+ * <p>This service handles card issuance, retrieval, and status transitions
+ * while enforcing strict business rules and ownership validations.</p>
  *
- * <p><strong>Domain ownership:</strong> owns only {@code CreditCardRepository}.
- * Cross-domain lookups are delegated:
+ * <p><b>Key Responsibilities:</b></p>
  * <ul>
- *   <li>{@link UserService} — user → customer resolution</li>
- *   <li>{@link CreditAccountService} — account entity lookup</li>
- *   <li>{@link CardProductService} — card product entity lookup</li>
+ *     <li>Issue credit cards (customer & admin flows)</li>
+ *     <li>Validate account eligibility and ownership</li>
+ *     <li>Manage card lifecycle transitions (ACTIVE, BLOCKED, etc.)</li>
+ *     <li>Enforce constraints like max cards per account and virtual card uniqueness</li>
+ *     <li>Retrieve card details securely</li>
  * </ul>
+ *
+ * <p><b>Domain Boundaries:</b></p>
+ * <ul>
+ *     <li>Owns {@code CreditCardRepository}</li>
+ *     <li>Delegates cross-domain lookups to other services</li>
+ * </ul>
+ * <ul>
+ *  *   <li>{@link UserService} — user → customer resolution</li>
+ *  *   <li>{@link CreditAccountService} — account entity lookup</li>
+ *  *   <li>{@link CardProductService} — card product entity lookup</li>
+ *  * </ul>
  *
  * <p>Valid card status transitions:
- * <ul>
- *   <li>PENDING_ACTIVATION → ACTIVE, CANCELLED</li>
- *   <li>ACTIVE → BLOCKED, CANCELLED, EXPIRED</li>
- *   <li>BLOCKED → ACTIVE, CANCELLED</li>
- *   <li>EXPIRED → CANCELLED</li>
- *   <li>CANCELLED → (terminal)</li>
- * </ul>
+ *  * <ul>
+ *  *   <li>PENDING_ACTIVATION → ACTIVE, CANCELLED</li>
+ *  *   <li>ACTIVE → BLOCKED, CANCELLED, EXPIRED</li>
+ *  *   <li>BLOCKED → ACTIVE, CANCELLED</li>
+ *  *   <li>EXPIRED → CANCELLED</li>
+ *  *   <li>CANCELLED → (terminal)</li>
+ *  * </ul>
+ * <p><b>Important:</b> This is a security-sensitive component.
+ * All operations enforce strict ownership and access control checks.</p>
  */
 
 @Service
@@ -81,6 +98,7 @@ public class CreditCardServiceImpl implements CreditCardService {
     private final CreditCardMapper cardMapper;
     private final MaskedCardNumberGenerator maskedCardNumberGenerator;
     private final CustomerService customerService;
+    private final CustomerAddressService customerAddressService;
 
     public CreditCardServiceImpl(
             CreditCardRepository cardRepository,
@@ -88,7 +106,7 @@ public class CreditCardServiceImpl implements CreditCardService {
             CreditAccountService creditAccountService,
             CardProductService cardProductService,
             CreditCardMapper cardMapper,
-            MaskedCardNumberGenerator maskedCardNumberGenerator) {
+            MaskedCardNumberGenerator maskedCardNumberGenerator, CustomerAddressService customerAddressService) {
 
         this.cardRepository = cardRepository;
         this.customerService = customerService; 
@@ -96,30 +114,29 @@ public class CreditCardServiceImpl implements CreditCardService {
         this.cardProductService = cardProductService;
         this.cardMapper = cardMapper;
         this.maskedCardNumberGenerator = maskedCardNumberGenerator;
-    }
-    
-    /**
-     * GET AVAILABLE CARD PRODUCTS (Customer)
-     * Customer can only pick card products that belong to
-     * the same CreditProduct as their account
-     */
-    @Override
-    @Transactional(readOnly = true)
-    public List<CardProductResponse> getAvailableCardProducts(UUID userId, UUID accountId) {
-
-        Customer customer = customerService.getCustomerByUserId(userId);
-        CreditAccount account = creditAccountService.getAccountEntity(accountId);
-
-        validateAccountOwnership(account, customer);
-        validateAccountActive(account);
-
-        List<CardProductResponse> products = cardProductService.getAllActive();
-
-        return  products;
+		this.customerAddressService = customerAddressService;
     }
 
     /**
-     * ISSUE CARD — Customer self-issuance
+     * Issues a new credit card for a customer.
+     *
+     * <p>This method allows a customer to request a card for their own account,
+     * subject to eligibility checks.</p>
+     *
+     * <p><b>Validations:</b></p>
+     * <ul>
+     *     <li>Account must belong to the user</li>
+     *     <li>Account must be ACTIVE</li>
+     *     <li>Card product must be valid and active</li>
+     *     <li>Maximum card limit per account must not be exceeded</li>
+     *     <li>Virtual card uniqueness enforced</li>
+     *     <li>Physical card requires address</li>
+     * </ul>
+     *
+     * @param userId   the user requesting the card
+     * @param accountId the target credit account
+     * @param request  issuance request payload
+     * @return issued card details
      */
     @Override
     public CreditCardResponse issueCard(
@@ -139,7 +156,14 @@ public class CreditCardServiceImpl implements CreditCardService {
     }
 
     /**
-     * ISSUE CARD — Admin on behalf of customer
+     * Issues a credit card on behalf of a customer (admin operation).
+     *
+     * <p>This method bypasses customer ownership validation but still enforces
+     * all business rules related to card issuance.</p>
+     *
+     * @param accountId the account for which the card is issued
+     * @param request   issuance request payload
+     * @return issued card details
      */
     @Override
     public CreditCardResponse issueCardByAdmin(UUID accountId, CreditCardIssuanceRequest request) {
@@ -149,25 +173,6 @@ public class CreditCardServiceImpl implements CreditCardService {
 
         return cardMapper.toResponse(card);
     }
-
-//    /**
-//     * GET customers CARDS (Customer — all accounts)
-//     */
-//    @Override
-//    @Transactional(readOnly = true)
-//    public ApiResponse<List<CreditCardIssuanceResponse>> getMyCards(UUID userId) {
-//
-//        Customer customer = customerService.getCustomerByUserId(userId);
-//
-//        List<CreditCardIssuanceResponse> cards = cardRepository
-//                .findAllByCreditAccountCustomerCustomerId(customer.getCustomerId())
-//                .stream()
-//                .map(cardMapper::toIssueResponse)
-//                .collect(Collectors.toList());
-//
-//        return new ApiResponse<>(Instant.now(), HttpStatus.OK.value(),
-//                "Cards fetched successfully", cards);
-//    }
 
     /**
      * GET CARDS BY ACCOUNT (Customer)
@@ -181,13 +186,11 @@ public class CreditCardServiceImpl implements CreditCardService {
 
         validateAccountOwnership(account, customer);
 
-        List<CreditCardResponse> cards = cardRepository
+        return cardRepository
                 .findAllByCreditAccountAccountId(account.getAccountId())
                 .stream()
                 .map(cardMapper::toResponse)
                 .collect(Collectors.toList());
-
-        return cards;
     }
 
     /**
@@ -226,29 +229,12 @@ public class CreditCardServiceImpl implements CreditCardService {
 
         Customer customer = customerService.getCustomerByUserId(principal.getUserId());
 
-        List<CreditCardIssuanceResponse> cards = cardRepository
+        return cardRepository
                 .findAllByCreditAccountCustomerCustomerIdAndCardStatus(customer.getCustomerId(), status)
                 .stream()
                 .map(cardMapper::toIssueResponse)
                 .toList();
-
-        return  cards;
     }
-
-//    /**
-//     * GET ALL CARDS (Admin)
-//     */
-//    @Override
-//    @Transactional(readOnly = true)
-//    public List<CreditCardIssuanceResponse> getAllCards() {
-//
-//        List<CreditCardIssuanceResponse> cards = cardRepository.findAll()
-//                .stream()
-//                .map(cardMapper::toIssueResponse)
-//                .collect(Collectors.toList());
-//
-//        return cards;
-//    }
 
     /**
      * Fetch cards by account id (Admin)
@@ -259,13 +245,11 @@ public class CreditCardServiceImpl implements CreditCardService {
 
         CreditAccount account = creditAccountService.getAccountEntity(accountId);
 
-        List<CreditCardResponse> cards = cardRepository
+        return cardRepository
                 .findAllByCreditAccountAccountId(account.getAccountId())
                 .stream()
                 .map(cardMapper::toResponse)
                 .toList();
-
-        return  cards;
     }
 
     /**
@@ -275,24 +259,46 @@ public class CreditCardServiceImpl implements CreditCardService {
     @Transactional(readOnly = true)
     public List<CreditCardIssuanceResponse> getCardsByStatus(CardStatus status) {
 
-        List<CreditCardIssuanceResponse> cards = cardRepository
+        return cardRepository
                 .findAllByCardStatus(status)
                 .stream()
                 .map(cardMapper::toIssueResponse)
                 .collect(Collectors.toList());
-
-        return cards;
     }
 
 
     @Override
     @Transactional(readOnly = true)
     public CreditCardResponse getCardById(UUID cardId) {
-        return cardMapper.toResponse(findCardById(cardId));
+    	CreditCard creditCard = cardRepository.findById(cardId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Card not found with id: " + cardId
+                        ));
+
+        return cardMapper.toResponse(creditCard);
     }
 
     /**
-     * UPDATE CARD STATUS (Shared)
+     * Updates the status of a credit card with role-based access control.
+     *
+     * <p><b>Behavior:</b></p>
+     * <ul>
+     *     <li>Validates ownership for customer users</li>
+     *     <li>Restricts customers to limited status transitions (ACTIVE, BLOCKED)</li>
+     *     <li>Admins can perform all valid transitions</li>
+     *     <li>Ensures transition follows predefined state machine</li>
+     *     <li>Applies relevant timestamps (activatedAt, blockedAt, etc.)</li>
+     * </ul>
+     *
+     * @param principal authenticated user
+     * @param accountId account ID
+     * @param cardId    card ID
+     * @param request   status update request
+     * @return updated card response
+     *
+     * @throws BusinessRuleException if transition is invalid
+     * @throws AccessDeniedException if user is unauthorized
      */
     @Override
     public CreditCardIssuanceResponse updateCardStatusForUser(
@@ -332,7 +338,22 @@ public class CreditCardServiceImpl implements CreditCardService {
     }
 
     /**
-     * CORE ISSUANCE LOGIC (shared by customer + admin)
+     * Core method responsible for constructing and issuing a credit card.
+     *
+     * <p>This method centralizes all issuance validations and entity creation logic.</p>
+     *
+     * <p><b>Validation Pipeline:</b></p>
+     * <ul>
+     *     <li>Card product must exist and be active</li>
+     *     <li>Physical cards require a valid customer address</li>
+     *     <li>Maximum active card limit per account enforced</li>
+     *     <li>Only one virtual card allowed per account</li>
+     * </ul>
+     *
+     * @param account   credit account
+     * @param request   issuance request
+     * @param issuedBy  source of issuance (CUSTOMER / ADMIN)
+     * @return persisted credit card entity
      */
     private CreditCard buildAndIssueCard(CreditAccount account,
     									 CreditCardIssuanceRequest request,
@@ -342,6 +363,8 @@ public class CreditCardServiceImpl implements CreditCardService {
         CreditCardProduct cardProduct = cardProductService.getActiveCardProductEntity(request.getCardProductId());
         //Gate 2: Parse Card Format
         CardFormat cardFormat = request.getCardFormat();
+        //Gate 4 :Address Check for Physical card 
+        validatePhysicalCardAddress(account.getCustomer(), cardFormat);
         //Gate 3: Max Active card per Account
         validateActiveCardLimit(account);
         //Gate 4: One VIRTUAL card per account at a time
@@ -351,78 +374,6 @@ public class CreditCardServiceImpl implements CreditCardService {
 
         return cardRepository.save(creditCard);
     }
-    
-//    @Override
-//    public ApiResponse<CreditCardIssuanceResponse> activateCard(
-//            CustomUserPrincipal principal,
-//            UUID cardId) {
-//
-//        CreditCard card = findCardById(cardId);
-//
-//        validateOwnershipIfCustomer(principal, card);
-//
-//        validateCardStatusTransition(card.getCardStatus(), CardStatus.ACTIVE);
-//
-//        if (card.getActivatedAt() == null) {
-//            card.setActivatedAt(Instant.now());
-//        }
-//
-//        card.setCardStatus(CardStatus.ACTIVE);
-//
-//        return buildSuccessResponse(card, "Card activated successfully");
-//    }
-//    
-//    @Override
-//    public ApiResponse<CreditCardIssuanceResponse> blockCard(
-//            CustomUserPrincipal principal,
-//            UUID cardId,
-//            String reason) {
-//
-//        CreditCard card = findCardById(cardId);
-//
-//        validateOwnershipIfCustomer(principal, card);
-//
-//        validateCardStatusTransition(card.getCardStatus(), CardStatus.BLOCKED);
-//
-//        card.setBlockedAt(Instant.now());
-//        card.setCardStatus(CardStatus.BLOCKED);
-//
-//        return buildSuccessResponse(card, "Card blocked successfully");
-//    }
-//    
-//    @Override
-//    public ApiResponse<CreditCardIssuanceResponse> unblockCard(
-//            CustomUserPrincipal principal,
-//            UUID cardId) {
-//
-//        CreditCard card = findCardById(cardId);
-//
-//        validateOwnershipIfCustomer(principal, card);
-//
-//        validateCardStatusTransition(card.getCardStatus(), CardStatus.ACTIVE);
-//
-//        card.setCardStatus(CardStatus.ACTIVE);
-//
-//        return buildSuccessResponse(card, "Card unblocked successfully");
-//    }
-//    
-//    @Override
-//    public ApiResponse<CreditCardIssuanceResponse> cancelCard(
-//            CustomUserPrincipal principal,
-//            UUID cardId,
-//            String reason) {
-//
-//        CreditCard card = findCardById(cardId);
-//
-//        validateOwnershipIfCustomer(principal, card);
-//
-//        validateCardStatusTransition(card.getCardStatus(), CardStatus.CANCELLED);
-//
-//        card.setCancelledAt(Instant.now());
-//        card.setCardStatus(CardStatus.CANCELLED);
-//
-//        return buildSuccessResponse(card, "Card cancelled successfully");
-//    }
     
     /**
      * {@inheritDoc}
@@ -439,8 +390,8 @@ public class CreditCardServiceImpl implements CreditCardService {
 
     /**
      * Account Ownership Validation
-     * @param account
-     * @param customer
+     * @param account Credit Account
+     * @param customer Authenticated Customer
      */
     private void validateAccountOwnership(CreditAccount account, Customer customer) {
         if (!account.getCustomer().getCustomerId().equals(customer.getCustomerId())) {
@@ -449,7 +400,7 @@ public class CreditCardServiceImpl implements CreditCardService {
     }
     /**
      * Validate Account Status 
-     * @param account
+     * @param account Credit Account
      */
     private void validateAccountActive(CreditAccount account) {
         if (account.getAccountStatus() != AccountStatus.ACTIVE) {
@@ -458,8 +409,8 @@ public class CreditCardServiceImpl implements CreditCardService {
     }
     /**
      * Validate the User is Customer
-     * @param principal
-     * @param card
+     * @param principal Custom User Principal
+     * @param card Credit card
      */
     private void validateOwnershipIfCustomer(CustomUserPrincipal principal, CreditCard card) {
         if (principal.getRole() == UserRole.CUSTOMER) {
@@ -472,18 +423,21 @@ public class CreditCardServiceImpl implements CreditCardService {
     }
     /**
      * Parse Credit Card By id
-     * @param cardId
-     * @return
+     * @param cardId Credit Card id
+     * @return Card Details
      */
     private CreditCard findCardById(UUID cardId) {
         return cardRepository.findById(cardId)
                 .orElseThrow(() -> new ResourceNotFoundException("Card not found: " + cardId));
     }
-    
-    
+
     /**
-     * Validate Maximum Card Limit Per Account 
-     * @param account
+     * Ensures that the account does not exceed the maximum allowed active cards.
+     *
+     * <p>Counts cards in ACTIVE and PENDING_ACTIVATION states.</p>
+     *
+     * @param account credit account
+     * @throws BusinessRuleException if limit is exceeded
      */
     private void validateActiveCardLimit(CreditAccount account) {
         int count = cardRepository.countByCreditAccountAccountIdAndCardStatusIn(
@@ -493,9 +447,13 @@ public class CreditCardServiceImpl implements CreditCardService {
         }
     }
     /**
-     * Validate that the card is unique
-     * @param account
-     * @param cardFormat
+     * Ensures only one virtual card exists per account.
+     *
+     * <p>Prevents issuing multiple active or pending virtual cards.</p>
+     *
+     * @param account    credit account
+     * @param cardFormat requested card format
+     * @throws BusinessRuleException if virtual card already exists
      */
     private void validateVirtualCardUniqueness(CreditAccount account, CardFormat cardFormat) {
         if (cardFormat == CardFormat.VIRTUAL) {
@@ -508,9 +466,20 @@ public class CreditCardServiceImpl implements CreditCardService {
         }
     }
     /**
-     * Validate Card Status Transition 
-     * @param current
-     * @param next
+     * Validates whether a card status transition is allowed.
+     *
+     * <p>Uses a predefined state transition map to ensure only valid transitions occur.</p>
+     *
+     * <p><b>Example:</b></p>
+     * <ul>
+     *     <li>ACTIVE → BLOCKED (allowed)</li>
+     *     <li>ACTIVE → PENDING_ACTIVATION (not allowed)</li>
+     * </ul>
+     *
+     * @param current current card status
+     * @param next    requested new status
+     * @throws BusinessRuleException if transition is invalid
+     * @throws ConflictException if status is unchanged
      */
     private void validateCardStatusTransition(CardStatus current, CardStatus next) {
         if (current == next) throw new ConflictException("Card is already in " + current + " status");
@@ -521,9 +490,18 @@ public class CreditCardServiceImpl implements CreditCardService {
         }
     }
     /**
-     * Apply Card Status change timestamp
-     * @param card
-     * @param newStatus
+     * Applies timestamps based on card status transitions.
+     *
+     * <p>Automatically updates lifecycle timestamps such as:</p>
+     * <ul>
+     *     <li>activatedAt</li>
+     *     <li>blockedAt</li>
+     *     <li>cancelledAt</li>
+     *     <li>expiresAt</li>
+     * </ul>
+     *
+     * @param card      credit card entity
+     * @param newStatus new card status
      */
     private void applyStatusTimestamps(CreditCard card, CardStatus newStatus) {
         Instant now = Instant.now();
@@ -535,15 +513,36 @@ public class CreditCardServiceImpl implements CreditCardService {
             default -> { }
         }
     }
- 
+    /**
+     * Constructs a new {@link CreditCard} entity with all required fields.
+     *
+     * <p><b>Responsibilities:</b></p>
+     * <ul>
+     *     <li>Assign card metadata (product, format, status)</li>
+     *     <li>Generate masked card number</li>
+     *     <li>Set expiry date based on product validity</li>
+     *     <li>Initialize channel permissions</li>
+     *     <li>Apply activation logic for virtual cards</li>
+     * </ul>
+     *
+     * @param request     issuance request
+     * @param account     credit account
+     * @param cardProduct card product
+     * @param cardFormat  card format
+     * @param issuedBy    issuer type
+     * @return constructed card entity
+     */
     private CreditCard buildCardEntity(CreditCardIssuanceRequest request,
             CreditAccount account, CreditCardProduct cardProduct, CardFormat cardFormat, IssuedBy issuedBy) {
-        LocalDateTime now = LocalDateTime.now();
+    	// Using LocalDateTime.now() uses the server's local time. If the server is in India (IST) 
+        // and it is 2:00 AM on the 1st of the month, but the customer is in the US, the customer 
+        // gets a card that expires a full month later than intended.
+        LocalDateTime now = LocalDateTime.now(ZoneId.of("UTC"));
         int expiryYear = now.getYear() + cardProduct.getCardValidityYears();
         int expiryMonth = now.getMonthValue();
+     // A credit card technically expires at 23:59:59 UTC on the last day of the month.
         Instant expiresAt = YearMonth.of(expiryYear, expiryMonth)
-                .atEndOfMonth().atTime(23, 59, 59).toInstant(ZoneOffset.UTC);
- 
+                .atEndOfMonth().atTime(23, 59, 59).atZone(ZoneId.of("UTC")).toInstant();
         CardStatus initialStatus = cardFormat == CardFormat.VIRTUAL
                 ? CardStatus.ACTIVE : CardStatus.PENDING_ACTIVATION;
  
@@ -553,11 +552,12 @@ public class CreditCardServiceImpl implements CreditCardService {
         card.setCardFormat(cardFormat);
         card.setCardStatus(initialStatus);
         card.setIssuanceReason(request.getIssuanceReason());
-        card.setMaskedCardNumber(maskedCardNumberGenerator.generate(cardProduct.getNetworkType().name()));
+        card.setMaskedCardNumber(maskedCardNumberGenerator.generate(cardProduct.getNetworkType()));
         card.setIssuedAt(Instant.now());
         card.setExpiresAt(expiresAt);
         card.setExpiryMonth(expiryMonth);
         card.setExpiryYear(expiryYear);
+        // Inheriting rules from the product catalog
         card.setOnlineEnabled(cardProduct.getOnlineTransactionsAllowed());
         card.setAtmEnabled(cardProduct.getAtmWithdrawalAllowed());
         card.setInternationalEnabled(cardProduct.getInternationalUsageAllowed());
@@ -568,13 +568,36 @@ public class CreditCardServiceImpl implements CreditCardService {
  
     /**
      * 
-     * @param principal
-     * @param card
+     * @param principal CustomUserPrincipal
+     * @param card Credit Card
      */
     private void validateCustomerCardOwnership(CustomUserPrincipal principal, CreditCard card) {
         Customer customer = customerService.getCustomerByUserId(principal.getUserId());
         if (!card.getCreditAccount().getCustomer().getCustomerId().equals(customer.getCustomerId())) {
             throw new AccessDeniedException("Access denied to this card");
+        }
+    }
+    /**
+     * Validates that a customer has a delivery address for physical card issuance.
+     *
+     * <p>Required only for PHYSICAL card format.</p>
+     *
+     * @param customer   customer entity
+     * @param cardFormat card format
+     * @throws BusinessRuleException if address is missing
+     */
+    private void validatePhysicalCardAddress(Customer customer, CardFormat cardFormat) {
+
+        if (cardFormat == CardFormat.PHYSICAL) {
+
+            boolean hasAddress = customerAddressService
+                    .hasAddress(customer.getCustomerId());
+
+            if (!hasAddress) {
+                throw new BusinessRuleException(
+                    "Physical card requires a delivery address. Please add an address first."
+                );
+            }
         }
     }
  

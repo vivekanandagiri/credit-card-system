@@ -1,6 +1,5 @@
 package com.example.config;
 
-import com.example.util.TimezoneContext;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
@@ -12,18 +11,29 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 
 public class InstantSerializer extends JsonSerializer<Instant> {
+    private final TimezoneResolver timezoneResolver;
 
-	@Override
-	public void serialize(Instant value,
-	                      JsonGenerator gen,
-	                      SerializerProvider serializers) throws IOException {
+    private static final DateTimeFormatter FORMATTER =
+            DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
-	    ZoneId zoneId = TimezoneContext.getZone();
-	    ZonedDateTime zonedDateTime = value.atZone(zoneId);
+    public InstantSerializer(TimezoneResolver timezoneResolver) {
+        this.timezoneResolver = timezoneResolver;
+    }
 
-	    DateTimeFormatter formatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
+    @Override
+    public void serialize(Instant value,
+                          JsonGenerator gen,
+                          SerializerProvider serializers) throws IOException {
 
-	    gen.writeString(zonedDateTime.format(formatter));
-	}
+        if (value == null) {
+            gen.writeNull();
+            return;
+        }
+
+        ZoneId zoneId = timezoneResolver.resolve(null);
+        ZonedDateTime zonedDateTime = value.atZone(zoneId);
+
+        gen.writeString(zonedDateTime.format(FORMATTER));
+    }
     
 }

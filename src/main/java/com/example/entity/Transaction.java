@@ -38,6 +38,16 @@ public class Transaction extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "credit_account_id", nullable = false)
     private CreditAccount account;
+    
+    //Payment Id for the bill payment transaction tracking
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "payment_id")
+    private Payment payment;
+    
+    //Bill 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "statement_id")
+    private BillingStatement statement;
 
     // ── Transaction details ──
     @Enumerated(EnumType.STRING)
@@ -92,6 +102,9 @@ public class Transaction extends BaseEntity {
     // ── Transaction Reference Number ──
     @Column(name = "reference_number", nullable = false, unique = true, length = 50)
     private String referenceNumber;
+    //Transaction Reference for purchase 
+    @Column(name = "transaction_reference", unique = true)
+    private String transactionReference;
 
     // ── Time stamp ──
     @Column(name = "transaction_time", nullable = false)

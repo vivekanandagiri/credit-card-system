@@ -1,15 +1,29 @@
 package com.example.entity;
 
-import com.example.enums.AccountStatus;
-import jakarta.persistence.*;
-import lombok.*;
-
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
 import org.hibernate.annotations.JdbcType;
 import org.hibernate.dialect.PostgreSQLEnumJdbcType;
+
+import com.example.enums.AccountStatus;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToOne;
+import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "credit_accounts")
@@ -62,6 +76,15 @@ public class CreditAccount extends BaseEntity {
     @Column(name = "available_balance", nullable = false, precision = 19, scale = 4)
     private BigDecimal availableBalance;
 
+    @Column(name = "grace_period_days", nullable = false)
+    private Integer gracePeriodDays;
+
+    @Column(name = "minimum_due_percent", nullable = false, precision = 5, scale = 2)
+    private BigDecimal minimumDuePercent;
+
+    @Column(name = "late_fee_amount", nullable = false, precision = 19, scale = 4)
+    private BigDecimal lateFeeAmount;
+
     // ── Billing ──
     @Column(name = "statement_cycle_day", nullable = false)
     private Integer statementCycleDay;
@@ -74,9 +97,6 @@ public class CreditAccount extends BaseEntity {
 
     @Column(name = "next_due_date")
     private Instant nextDueDate;
-
-    @Column(name = "minimum_due_amount", nullable = false, precision = 19, scale = 4)
-    private BigDecimal minimumDueAmount;
 
     @Column(name = "last_payment_date")
     private Instant lastPaymentDate;

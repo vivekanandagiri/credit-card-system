@@ -15,6 +15,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -65,5 +66,37 @@ class UserServiceImplTest {
 
             verify(userRepository).findById(userId);
         }
+    }
+    @Nested
+    @DisplayName("getAllUsers")
+    class GetAllUsersTest {
+
+    	@Test
+    	void shouldReturnAllUsers() {
+
+    	    User user = new User();
+    	    user.setUserId(UUID.randomUUID());
+
+    	    when(userRepository.findAll()).thenReturn(List.of(user, user));
+
+    	    List<User> result = userService.getAllUsers();
+
+    	    assertThat(result)
+    	            .hasSize(2)
+    	            .containsExactly(user, user);
+
+    	    verify(userRepository).findAll();
+    	}
+    	@Test
+    	void shouldReturnEmptyListWhenNoUsersExist() {
+
+    	    when(userRepository.findAll()).thenReturn(List.of());
+
+    	    List<User> result = userService.getAllUsers();
+
+    	    assertThat(result).isEmpty();
+
+    	    verify(userRepository).findAll();
+    	}
     }
 }

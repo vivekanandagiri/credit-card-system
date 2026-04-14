@@ -52,18 +52,7 @@ public class CardProductController implements CardProductApi {
 		return ResponseEntity.ok(ApiResponse.success(HttpStatus.OK,"Card product updated successfully", response));
 	}
 
-	@Override
-	@PreAuthorize("hasRole('ADMIN')")
-	public ResponseEntity<ApiResponse<String>> updateStatus(UUID id, ProductStatus status) {
 
-		String result = cardProductService.updateStatus(id, status);
-
-		String message = status == ProductStatus.ACTIVE 
-				? "Card product activated successfully"
-				: "Card product deactivated successfully";
-
-		return ResponseEntity.ok(ApiResponse.success(HttpStatus.OK,message, result));
-	}
 
 	@Override
 	public ResponseEntity<ApiResponse<List<CardProductResponse>>> getAll(ProductStatus status) {

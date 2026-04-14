@@ -27,6 +27,7 @@ public class CustomerProfileUpdateRequest {
 	@Past(message = "Date of birth must be in the past")
 	private LocalDate dateOfBirth;
 
+	
 	@Schema(description = "Residency status of the customer", example = "RESIDENT", allowableValues = { "RESIDENT",
 			"NON_RESIDENT", "NRI" }, maxLength = 30)
 	@NotBlank(message = "Residency status cannot be blank")

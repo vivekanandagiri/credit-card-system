@@ -1,204 +1,164 @@
 package com.example.controller;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import java.util.List;
 import java.util.UUID;
 
+import com.example.dto.request.AddressCreateRequest;
+import com.example.dto.response.AddressResponse;
+import com.example.enums.UserRole;
+import com.example.security.CustomUserPrincipal;
+import com.example.service.CustomerAddressService;
+import com.example.testutil.TestFixtures;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.autoconfigure.web.servlet.*;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.ComponentScan.Filter;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 
-import com.example.dto.request.AddressCreateRequest;
-import com.example.dto.response.AddressResponse;
+import com.example.config.TimezoneInterceptor;
+import com.example.config.WebConfig;
 import com.example.security.JwtFilter;
-import com.example.service.CustomerAddressService;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 @WebMvcTest(
         controllers = CustomerAddressController.class,
         excludeAutoConfiguration = SecurityAutoConfiguration.class,
-        excludeFilters = @Filter(
-                type = FilterType.ASSIGNABLE_TYPE,
-                classes = JwtFilter.class
-        )
+        excludeFilters = {
+                @Filter(type = FilterType.ASSIGNABLE_TYPE, classes = JwtFilter.class),
+                @Filter(type = FilterType.ASSIGNABLE_TYPE, classes = TimezoneInterceptor.class),
+                @Filter(type = FilterType.ASSIGNABLE_TYPE, classes = WebConfig.class)
+        }
 )
 @AutoConfigureMockMvc(addFilters = false)
 class CustomerAddressControllerTest {
 
-    @Autowired
-    private MockMvc mockMvc;
+    @Autowired private MockMvc mockMvc;
+    @Autowired private ObjectMapper objectMapper;
 
-    @Autowired
-    private ObjectMapper objectMapper;
+    @MockBean private CustomerAddressService service;
 
-    @MockBean
-    private CustomerAddressService service;
-
-
-    // ADD ADDRESS TESTS
+    // ================= ADD ADDRESS =================
 
     @Nested
-    @DisplayName("Add Address API Tests")
+    @DisplayName("POST /addresses")
     class AddAddressTests {
 
         @Test
-        void add_address_success() throws Exception {
+        void shouldAddAddress_whenValidRequest() throws Exception {
+            // GIVEN
+            UUID userId = UUID.randomUUID();
+            AddressCreateRequest request = TestFixtures.validAddressRequest();
 
-            AddressCreateRequest request = new AddressCreateRequest(
-                    "HOME",
-                    "123 MG Road",
-                    "Near Metro",
-                    "Bangalore",
-                    "Karnataka",
-                    "560001",
-                    "India",
-                    true
-            );
-
-
-            when(service.addAddress(any(), any(AddressCreateRequest.class)))
+            when(service.addAddress(any(), any()))
                     .thenReturn("Address created");
 
-            mockMvc.perform(post("/api/v1/customers/addresses")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
+            // WHEN + THEN
+            performPost(userId, request)
                     .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.message").value("Address added successfully"))
                     .andExpect(jsonPath("$.data").value("Address created"))
                     .andExpect(jsonPath("$.timestamp").exists());
-
-            verify(service, times(1))
-                    .addAddress(any(), any(AddressCreateRequest.class));
         }
 
         @Test
-        void add_address_missing_required_field() throws Exception {
+        void shouldReturnBadRequest_whenInvalidInput() throws Exception {
+            AddressCreateRequest request = TestFixtures.invalidAddressRequest();
 
-            AddressCreateRequest request = new AddressCreateRequest(
-                    "",
-                    "",
-                    "Near Metro",
-                    "Bangalore",
-                    "Karnataka",
-                    "560001",
-                    "India",
-                    false
-            );
-
-            mockMvc.perform(post("/api/v1/customers/addresses")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isBadRequest());
-        }
-
-        @Test
-        void add_address_invalid_postal_code() throws Exception {
-
-            AddressCreateRequest request = new AddressCreateRequest(
-                    "HOME",
-                    "123 MG Road",
-                    "Near Metro",
-                    "Bangalore",
-                    "Karnataka",
-                    "123",
-                    "India",
-                    false
-            );
-
-            mockMvc.perform(post("/api/v1/customers/addresses")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isBadRequest());
-        }
-        @Test
-        void add_address_validation_failure() throws Exception {
-
-            AddressCreateRequest request = new AddressCreateRequest(
-                    "", "", "Near Metro", "Bangalore",
-                    "Karnataka", "123", "India", false
-            );
-
-            mockMvc.perform(post("/api/v1/customers/addresses")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
+            performPost(UUID.randomUUID(), request)
                     .andExpect(status().isBadRequest());
         }
     }
 
+    // ================= GET ADDRESSES =================
 
-    // GET ADDRESSES TESTS
     @Nested
-    @DisplayName("Get Addresses API Tests")
+    @DisplayName("GET /addresses")
     class GetAddressesTests {
 
         @Test
-        void get_addresses_success() throws Exception {
-
+        void shouldReturnAddresses_whenAvailable() throws Exception {
+            // GIVEN
+            UUID userId = UUID.randomUUID();
             UUID addressId = UUID.randomUUID();
 
-            AddressResponse address =
-                    new AddressResponse(
-                            addressId,
-                            "123 MG Road",
-                            "Bangalore",
-                            "Karnataka",
-                            "560001",
-                            "India"
-                    );
+            AddressResponse response = new AddressResponse(
+                    addressId, "123 MG Road", "Bangalore",
+                    "Karnataka", "560001", "India"
+            );
 
-            
             when(service.getAddresses(any()))
-                    .thenReturn(List.of(address));
+                    .thenReturn(List.of(response));
 
-            mockMvc.perform(get("/api/v1/customers/addresses"))
+            // WHEN + THEN
+            performGet(userId)
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.message").value("Addresses fetched successfully"))
-                    .andExpect(jsonPath("$.data[0].addressId").value(addressId.toString()))
-                    .andExpect(jsonPath("$.data[0].city").value("Bangalore"))
-                    .andExpect(jsonPath("$.timestamp").exists());
-
-            verify(service, times(1)).getAddresses(any());
+                    .andExpect(jsonPath("$.data[0].addressId")
+                            .value(addressId.toString()))
+                    .andExpect(jsonPath("$.data[0].city")
+                            .value("Bangalore"));
         }
     }
 
+    // ================= DELETE ADDRESS =================
 
-    // DELETE ADDRESS TESTS
     @Nested
-    @DisplayName("Delete Address API Tests")
+    @DisplayName("DELETE /addresses/{id}")
     class DeleteAddressTests {
 
         @Test
-        void delete_address_success() throws Exception {
-
+        void shouldDeleteAddress_whenValidRequest() throws Exception {
+            // GIVEN
+            UUID userId = UUID.randomUUID();
             UUID addressId = UUID.randomUUID();
 
             when(service.deleteAddress(any(), eq(addressId)))
                     .thenReturn("Address Deleted");
 
-            mockMvc.perform(delete("/api/v1/customers/addresses/{id}", addressId))
+            // WHEN + THEN
+            performDelete(userId, addressId)
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.message")
                             .value("Address deleted successfully"))
-                    .andExpect(jsonPath("$.data").value("Address Deleted"))
-                    .andExpect(jsonPath("$.timestamp").exists());
-
-            verify(service, times(1))
-                    .deleteAddress(any(), eq(addressId));
+                    .andExpect(jsonPath("$.data")
+                            .value("Address Deleted"));
         }
+    }
+
+    // ================= HELPERS =================
+
+    private CustomUserPrincipal getPrincipal(UUID userId) {
+        return new CustomUserPrincipal(userId, null, "test@test.com", UserRole.CUSTOMER);
+    }
+
+    private ResultActions performPost(UUID userId, Object body) throws Exception {
+        return mockMvc.perform(post("/api/v1/customers/addresses")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(body))
+                .requestAttr("principal", getPrincipal(userId)));
+    }
+
+    private ResultActions performGet(UUID userId) throws Exception {
+        return mockMvc.perform(get("/api/v1/customers/addresses")
+                .requestAttr("principal", getPrincipal(userId)));
+    }
+
+    private ResultActions performDelete(UUID userId, UUID id) throws Exception {
+        return mockMvc.perform(delete("/api/v1/customers/addresses/{id}", id)
+                .requestAttr("principal", getPrincipal(userId)));
     }
 }

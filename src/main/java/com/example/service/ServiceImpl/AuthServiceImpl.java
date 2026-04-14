@@ -24,7 +24,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 
 /**
- * AuthServiceImpl class for user authentication and registration.
+ * Core authentication and identity provisioning service.
+ * Handles secure user onboarding, credential verification, and JWT issuance.
  */
 @Service
 @Transactional
@@ -100,7 +101,7 @@ public class AuthServiceImpl implements AuthService {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(InvalidCredentialsException::new);
 
-        // Check if user is active and not locked
+        // Validate account state BEFORE checking the password,Check if user is active and not locked
         validateAccountState(user);
 
         // Check if the provided password matches the encrypted password in db
@@ -123,7 +124,7 @@ public class AuthServiceImpl implements AuthService {
         );
     }
     
- // ── VALIDATIONS ─────────────────────────
+ // ---------------------- VALIDATIONS ---------------------------------
 
     // Helper method to check unique fields
     private void validateUniqueFields(RegisterRequest request) {

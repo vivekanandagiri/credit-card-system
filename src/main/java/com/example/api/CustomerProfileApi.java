@@ -17,14 +17,38 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import jakarta.validation.Valid;
 
-@Tag(name = "Customer Profile")
+/**
+ * API contract for Customer Profile management.
+ *
+ * <p>This API allows authenticated customers to:
+ * <ul>
+ *     <li>View their profile details</li>
+ *     <li>Update their profile information</li>
+ * </ul>
+ *
+ * <p>Base URL: <b>/api/v1/customers/profile</b>
+ *
+ * <p>All endpoints require authentication.
+ * Authenticated user is injected via {@link CustomUserPrincipal}.
+ *
+ * <p>All responses are wrapped in {@link ApiResponse}
+ */
+@Tag(name = "Customer Profile", description = "APIs for managing customer profile")
 @RequestMapping("/api/v1/customers/profile")
 public interface CustomerProfileApi {
 
-    // ==========================================
-    // GET PROFILE
-    // ==========================================
-    @Operation(summary = "Get logged-in customer profile")
+    /**
+     * Get logged-in customer profile.
+     *
+     * <p>Fetches the profile details of the currently authenticated user.
+     *
+     * @param principal authenticated user
+     * @return customer profile details
+     */
+    @Operation(
+            summary = "Get logged-in customer profile",
+            description = "Fetch profile details of the currently authenticated customer"
+    )
     @ApiResponses(value = {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "200",
@@ -40,13 +64,27 @@ public interface CustomerProfileApi {
     })
     @GetMapping
     ResponseEntity<ApiResponse<CustomerProfileResponse>> getProfile(
-            @AuthenticationPrincipal CustomUserPrincipal principal
+
+            @AuthenticationPrincipal
+            CustomUserPrincipal principal
     );
 
-    // ==========================================
-    // UPDATE PROFILE
-    // ==========================================
-    @Operation(summary = "Update logged-in customer profile")
+    /**
+     * Update logged-in customer profile.
+     *
+     * <p>Allows the authenticated user to update their profile information
+     * such as name, contact details, or address.
+     *
+     * <p>Only provided fields will be updated (partial update behavior).
+     *
+     * @param principal authenticated user
+     * @param request updated profile data
+     * @return success message
+     */
+    @Operation(
+            summary = "Update logged-in customer profile",
+            description = "Update profile details of the authenticated customer"
+    )
     @ApiResponses(value = {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "200",
@@ -54,7 +92,7 @@ public interface CustomerProfileApi {
             ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "400",
-                    description = "Invalid request"
+                    description = "Invalid request data"
             ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "401",
@@ -63,7 +101,17 @@ public interface CustomerProfileApi {
     })
     @PutMapping
     ResponseEntity<ApiResponse<String>> updateProfile(
-            @AuthenticationPrincipal CustomUserPrincipal principal,
+
+            @AuthenticationPrincipal
+            CustomUserPrincipal principal,
+
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    description = "Updated customer profile data",
+                    required = true,
+                    content = @Content(
+                            schema = @Schema(implementation = CustomerProfileUpdateRequest.class)
+                    )
+            )
             @Valid @RequestBody CustomerProfileUpdateRequest request
     );
 }

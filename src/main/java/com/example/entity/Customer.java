@@ -60,6 +60,9 @@ public class Customer extends BaseEntity {
     @Column(name = "kyc_status", columnDefinition = "kyc_status")
     private KycStatus kycStatus;
 
-    @OneToOne(mappedBy = "customer", fetch = FetchType.LAZY)
+    @OneToOne(mappedBy = "customer", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
     private User user;
+    
+    @Column(name = "timezone", nullable = false)
+    private String timezone;
 }

@@ -6,6 +6,8 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
+import com.example.config.TimezoneInterceptor;
+import com.example.config.WebConfig;
 import com.example.dto.request.CreditProductCreateRequest;
 import com.example.dto.request.CreditProductUpdateRequest;
 import com.example.dto.response.CreditProductCreateResponse;
@@ -26,7 +28,8 @@ import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfi
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-
+import org.springframework.context.annotation.FilterType;
+import org.springframework.context.annotation.ComponentScan.Filter;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -36,7 +39,12 @@ import java.util.List;
 
 @WebMvcTest(
         controllers = CreditProductController.class,
-        excludeAutoConfiguration = SecurityAutoConfiguration.class
+        excludeAutoConfiguration = SecurityAutoConfiguration.class,
+        excludeFilters = { 
+				@Filter(type = FilterType.ASSIGNABLE_TYPE,classes = JwtFilter.class),
+				@Filter(type = FilterType.ASSIGNABLE_TYPE,classes = TimezoneInterceptor.class),
+				@Filter(type = FilterType.ASSIGNABLE_TYPE,classes = WebConfig.class)
+	}
 )
 @AutoConfigureMockMvc(addFilters = false)
 class CreditProductControllerTest {

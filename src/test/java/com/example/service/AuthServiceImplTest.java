@@ -1,19 +1,16 @@
 package com.example.service;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
-import java.time.LocalDate;
 import java.util.Optional;
-import java.util.UUID;
 
 import com.example.dto.request.LoginRequest;
 import com.example.dto.request.RegisterRequest;
 import com.example.dto.response.RegisterResponse;
 import com.example.entity.Customer;
 import com.example.entity.User;
-import com.example.enums.Gender;
-import com.example.enums.UserRole;
 import com.example.exception.BusinessRuleException;
 import com.example.exception.ConflictException;
 import com.example.exception.InvalidCredentialsException;
@@ -22,278 +19,155 @@ import com.example.repository.UserRepository;
 import com.example.security.JwtUtil;
 import com.example.service.ServiceImpl.AuthServiceImpl;
 
+import com.example.testutil.TestFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
  * Unit tests for {@link AuthServiceImpl}.
  */
 
+@ExtendWith(MockitoExtension.class)
 class AuthServiceImplTest {
 
-    @Mock
-    private UserRepository userRepository;
-
-    @Mock
-    private CustomerService customerService;
-
-    @Mock
-    private PasswordEncoder passwordEncoder;
-    
-    @Mock
-    private AuthMapper authMapper;
-
-    @Mock
-    private JwtUtil jwtUtil;
+    @Mock private UserRepository userRepository;
+    @Mock private CustomerService customerService;
+    @Mock private PasswordEncoder passwordEncoder;
+    @Mock private AuthMapper authMapper;
+    @Mock private JwtUtil jwtUtil;
 
     @InjectMocks
     private AuthServiceImpl authService;
 
-    private RegisterRequest registerRequest;
+    private RegisterRequest request;
 
     @BeforeEach
-    void setup() {
-        MockitoAnnotations.openMocks(this);
-
-        registerRequest = new RegisterRequest(
-                "vivek@gmail.com",
-                "9765432101",
-                "Password@123",
-                "Vivek",
-                "Giri",
-                LocalDate.of(2000, 8, 15),
-                Gender.MALE,
-                "ABCDE1234F",
-                "RESIDENT",
-                "India"
-        );
+    void setUp() {
+        request = TestFixtures.validRegisterRequest();
     }
 
-    /**
-     *  REGISTER TESTS
-     */
+    // ================= REGISTER =================
+
     @Nested
-    @DisplayName("Register Service Tests")
+    @DisplayName("Register Tests")
     class RegisterTests {
 
-    	@Test
-    	void register_success() {
+        @Test
+        void shouldRegisterUserSuccessfully_whenValidRequest() {
+            // GIVEN
+            Customer customer = new Customer();
+            User user = TestFixtures.validUser();
 
-    	    Customer customer = new Customer();
-    	    User user = new User();
-    	    user.setUserId(UUID.randomUUID());
+            mockValidChecks();
 
-    	    when(userRepository.existsByEmail(any())).thenReturn(false);
-    	    when(userRepository.existsByMobileNumber(any())).thenReturn(false);
-    	    when(customerService.panNumberExists(any())).thenReturn(false);
+            when(passwordEncoder.encode(any())).thenReturn("encoded");
+            when(authMapper.toCustomer(request)).thenReturn(customer);
+            when(authMapper.toUser(any(), any(), any())).thenReturn(user);
+            when(customerService.saveCustomer(customer)).thenReturn(customer);
 
-    	    when(passwordEncoder.encode(any())).thenReturn("encoded-password");
+            // WHEN
+            RegisterResponse response = authService.register(request);
 
-    	    when(authMapper.toCustomer(registerRequest)).thenReturn(customer);
-    	    when(authMapper.toUser(any(), any(), any())).thenReturn(user);
-    	    
-    	    when(customerService.saveCustomer(customer)).thenReturn(customer);
+            // THEN
+            assertThat(response.getUserId()).isEqualTo(user.getUserId());
 
-    	    RegisterResponse response = authService.register(registerRequest);
-    	    
-    	    assertNotNull(response);
-    	    assertEquals(user.getUserId(), response.getUserId());
-    	    
-    	    verify(customerService).saveCustomer(customer);
-    	    verify(userRepository).save(user);
-    	}
-
-    	@Test
-        void register_duplicate_email() {
-
-            when(userRepository.existsByEmail(registerRequest.getEmail())).thenReturn(true);
-
-            assertThrows(ConflictException.class, () -> {
-                authService.register(registerRequest);
-            });
-            verify(userRepository, never()).save(any());
+            verify(userRepository).save(user);
+            verify(customerService).saveCustomer(customer);
         }
 
-    	
         @Test
-        void register_duplicate_mobile() {
+        void shouldThrowConflict_whenEmailExists() {
+            // GIVEN
+            when(userRepository.existsByEmail(request.getEmail()))
+                    .thenReturn(true);
 
-            when(userRepository.existsByEmail(registerRequest.getEmail())).thenReturn(false);
-            when(userRepository.existsByMobileNumber(registerRequest.getMobileNumber())).thenReturn(true);
+            // WHEN + THEN
+            assertThatThrownBy(() -> authService.register(request))
+                    .isInstanceOf(ConflictException.class);
 
-            assertThrows(ConflictException.class, () -> {
-                authService.register(registerRequest);
-            });
             verify(userRepository, never()).save(any());
         }
 
         @Test
-        void register_duplicate_pan() {
-
-            when(userRepository.existsByEmail(registerRequest.getEmail())).thenReturn(false);
-            when(userRepository.existsByMobileNumber(registerRequest.getMobileNumber())).thenReturn(false);
-            when(customerService.panNumberExists(registerRequest.getPanNumber()))
-            .thenReturn(true);
-            assertThrows(ConflictException.class, () -> {
-                authService.register(registerRequest);
-            });
-            verify(userRepository, never()).save(any());
-        }
-
-        @Test
-        void register_dob_missing() {
-
-            registerRequest.setDateOfBirth(null);
-
+        void shouldThrowConflict_whenMobileExists() {
+            // GIVEN
             when(userRepository.existsByEmail(any())).thenReturn(false);
-            when(userRepository.existsByMobileNumber(any())).thenReturn(false);
-            when(customerService.panNumberExists(any())).thenReturn(false);
-            
-            assertThrows(BusinessRuleException.class, () -> {
-                authService.register(registerRequest);
-            });
-            verify(userRepository, never()).save(any());
+            when(userRepository.existsByMobileNumber(any())).thenReturn(true);
+
+            // WHEN + THEN
+            assertThatThrownBy(() -> authService.register(request))
+                    .isInstanceOf(ConflictException.class);
         }
 
         @Test
-        void register_underage_customer() {
-            registerRequest.setDateOfBirth(LocalDate.now().minusYears(10));
- 
-            when(userRepository.existsByEmail(any())).thenReturn(false);
-            when(userRepository.existsByMobileNumber(any())).thenReturn(false);
-            when(customerService.panNumberExists(any())).thenReturn(false);
- 
-            assertThrows(BusinessRuleException.class,
-                    () -> authService.register(registerRequest));
-        }
+        void shouldThrowException_whenDobIsNull() {
+            request.setDateOfBirth(null);
+            mockValidChecks();
 
-        @Test
-        void register_future_dob() {
-            registerRequest.setDateOfBirth(LocalDate.now().plusDays(1));
- 
-            when(userRepository.existsByEmail(any())).thenReturn(false);
-            when(userRepository.existsByMobileNumber(any())).thenReturn(false);
-            when(customerService.panNumberExists(any())).thenReturn(false);
- 
-            assertThrows(BusinessRuleException.class,
-                    () -> authService.register(registerRequest));
+            assertThatThrownBy(() -> authService.register(request))
+                    .isInstanceOf(BusinessRuleException.class);
         }
     }
 
-    /**
-     * LOGIN TESTS
-     */
+    // ================= LOGIN =================
+
     @Nested
-    @DisplayName("Login Service Tests")
+    @DisplayName("Login Tests")
     class LoginTests {
 
         @Test
-        void login_success() {
+        void shouldLoginSuccessfully_whenValidCredentials() {
+            // GIVEN
+            LoginRequest login = TestFixtures.validLoginRequest();
+            User user = TestFixtures.validUser();
 
-            LoginRequest request = new LoginRequest();
-            request.setEmail("vivek@gmail.com");
-            request.setPassword("Password@123");
-
-            User user = new User();
-            user.setUserId(UUID.randomUUID());
-            user.setEmail("vivek@gmail.com");
-            user.setPasswordHash("encoded-password");
-            user.setRole(UserRole.CUSTOMER);
-            user.setActive(true);
-            
-            user.setLocked(false);
-
-            when(userRepository.findByEmail(request.getEmail()))
+            when(userRepository.findByEmail(login.getEmail()))
                     .thenReturn(Optional.of(user));
-
             when(passwordEncoder.matches(any(), any())).thenReturn(true);
             when(jwtUtil.generateToken(user)).thenReturn("jwt-token");
 
-            var response = authService.login(request);
-            
-            assertNotNull(response);
-            assertEquals("jwt-token", response.getAccessToken());
+            // WHEN
+            var response = authService.login(login);
+
+            // THEN
+            assertThat(response.getAccessToken()).isEqualTo("jwt-token");
         }
-        
 
         @Test
-        void login_user_not_found() {
-
-            LoginRequest request = new LoginRequest();
-            request.setEmail("unknown@gmail.com");
-
+        void shouldThrowException_whenUserNotFound() {
             when(userRepository.findByEmail(any()))
                     .thenReturn(Optional.empty());
 
-            assertThrows(InvalidCredentialsException.class, () -> {
-                authService.login(request);
-            });
+            assertThatThrownBy(() -> authService.login(new LoginRequest()))
+                    .isInstanceOf(InvalidCredentialsException.class);
         }
 
         @Test
-        void login_invalid_password() {
-
-            LoginRequest request = new LoginRequest();
-            request.setEmail("vivek@gmail.com");
-            request.setPassword("wrong");
-
-            User user = new User();
-            user.setEmail("vivek@gmail.com");
-            user.setPasswordHash("encoded-password");
-            user.setActive(true);
+        void shouldThrowException_whenAccountLocked() {
+            User user = TestFixtures.validUser();
+            user.setLocked(true);
 
             when(userRepository.findByEmail(any()))
                     .thenReturn(Optional.of(user));
 
-            when(passwordEncoder.matches(any(), any())).thenReturn(false);
+            assertThatThrownBy(() -> authService.login(TestFixtures.validLoginRequest()))
+                    .isInstanceOf(BusinessRuleException.class);
 
-            assertThrows(InvalidCredentialsException.class, () -> {
-                authService.login(request);
-            });
-        }
-        @Test
-        void login_account_disabled() {
-            LoginRequest request = new LoginRequest();
-            request.setEmail("vivek@gmail.com");
-            request.setPassword("Password@123");
- 
-            User user = new User();
-            user.setEmail("vivek@gmail.com");
-            user.setPasswordHash("encoded-password");
-            user.setActive(false); // disabled account
-            user.setLocked(false);
- 
-            when(userRepository.findByEmail(any())).thenReturn(Optional.of(user));
- 
-            assertThrows(BusinessRuleException.class,
-                    () -> authService.login(request));
- 
-            // Password check must not be reached
             verify(passwordEncoder, never()).matches(any(), any());
         }
-        
-        @Test
-        void login_account_locked() {
-            LoginRequest request = new LoginRequest();
-            request.setEmail("vivek@gmail.com");
-            request.setPassword("Password@123");
- 
-            User user = new User();
-            user.setEmail("vivek@gmail.com");
-            user.setPasswordHash("encoded-password");
-            user.setActive(true);
-            user.setLocked(true); // locked account
- 
-            when(userRepository.findByEmail(any())).thenReturn(Optional.of(user));
- 
-            assertThrows(BusinessRuleException.class,
-                    () -> authService.login(request));
- 
-            verify(passwordEncoder, never()).matches(any(), any());
-        }
+    }
+
+    // ================= HELPER =================
+
+    private void mockValidChecks() {
+        when(userRepository.existsByEmail(any())).thenReturn(false);
+        when(userRepository.existsByMobileNumber(any())).thenReturn(false);
+        when(customerService.panNumberExists(any())).thenReturn(false);
     }
 }

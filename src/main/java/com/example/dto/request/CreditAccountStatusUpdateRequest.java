@@ -1,9 +1,14 @@
 package com.example.dto.request;
 
+import com.example.enums.AccountStatus;
+
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Getter
 @Setter 
@@ -14,9 +19,10 @@ public class CreditAccountStatusUpdateRequest {
 
 	@Schema(description = "Credit Account Status.(e.g:ACTIVE, SUSPENDED, BLOCKED, CLOSED)",
 			example = "ACTIVE",
+			implementation = AccountStatus.class,
 			requiredMode = Schema.RequiredMode.REQUIRED)
-    @NotBlank(message = "Status is required")
-    private String status;   // ACTIVE, SUSPENDED, BLOCKED, CLOSED
+	@NotNull(message = "Status is required")
+    private AccountStatus status;   // ACTIVE, SUSPENDED, BLOCKED, CLOSED
 	
 	@Schema(description = "Reason of changing the status ",
 			example = "Suspicious Transaction detected",

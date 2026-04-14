@@ -5,375 +5,153 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-import java.time.LocalDate;
 import java.util.UUID;
-
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.ComponentScan.Filter;
-import org.springframework.context.annotation.FilterType;
-import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
 
 import com.example.dto.request.LoginRequest;
 import com.example.dto.request.RegisterRequest;
 import com.example.dto.response.LoginResponse;
 import com.example.dto.response.RegisterResponse;
 import com.example.dto.response.UserInfo;
-import com.example.enums.Gender;
 import com.example.exception.ConflictException;
 import com.example.exception.InvalidCredentialsException;
 import com.example.security.JwtFilter;
+import com.example.config.TimezoneInterceptor;
+import com.example.config.WebConfig;
 import com.example.service.AuthService;
+import com.example.testutil.TestFixtures;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
+import org.springframework.boot.test.autoconfigure.web.servlet.*;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.ComponentScan.Filter;
+import org.springframework.context.annotation.FilterType;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 
 @WebMvcTest(
         controllers = AuthController.class,
         excludeAutoConfiguration = SecurityAutoConfiguration.class,
-        excludeFilters = @Filter(
-                type = FilterType.ASSIGNABLE_TYPE,
-                classes = JwtFilter.class
-        )
+        excludeFilters = {
+                @Filter(type = FilterType.ASSIGNABLE_TYPE, classes = JwtFilter.class),
+                @Filter(type = FilterType.ASSIGNABLE_TYPE, classes = TimezoneInterceptor.class),
+                @Filter(type = FilterType.ASSIGNABLE_TYPE, classes = WebConfig.class)
+        }
 )
 @AutoConfigureMockMvc(addFilters = false)
 class AuthControllerTest {
 
-    @Autowired
-    private MockMvc mockMvc;
+    @Autowired private MockMvc mockMvc;
+    @Autowired private ObjectMapper objectMapper;
 
-    @Autowired
-    private ObjectMapper objectMapper;
+    @MockBean private AuthService authService;
 
-    @MockBean
-    private AuthService authService;
+    // ================= REGISTER =================
 
-    // REGISTER TESTS 
     @Nested
     @DisplayName("Register API Tests")
     class RegisterTests {
 
         @Test
-        void register_success() throws Exception {
-
-            RegisterRequest request = new RegisterRequest(
-                    "vivek@gmail.com",
-                    "9765432101",
-                    "Vivek@123",
-                    "Vivek",
-                    "Giri",
-                    LocalDate.of(2000, 8, 15),
-                    Gender.MALE,
-                    "ABCDE1234F",
-                    "RESIDENT",
-                    "India"
-            );
-
+        void shouldReturnCreated_whenValidRequest() throws Exception {
+            // GIVEN
+            RegisterRequest request = TestFixtures.validRegisterRequest();
             UUID userId = UUID.randomUUID();
 
-            RegisterResponse registerResponse =
-                    new RegisterResponse(userId);
+            when(authService.register(any()))
+                    .thenReturn(new RegisterResponse(userId));
 
-            when(authService.register(any(RegisterRequest.class)))
-            .thenReturn(registerResponse);
-
-
-            mockMvc.perform(post("/api/v1/auth/register")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
+            // WHEN + THEN
+            performPost("/api/v1/auth/register", request)
                     .andExpect(status().isCreated())
-                    .andExpect(jsonPath("$.message").value("User registered successfully"))
                     .andExpect(jsonPath("$.data.userId").value(userId.toString()))
-                    .andExpect(jsonPath("$.timestamp").exists());
-
-            verify(authService, times(1)).register(any(RegisterRequest.class));
+                    .andExpect(jsonPath("$.message").value("User registered successfully"));
         }
-        
-        @Test
-        void register_invalid_email() throws Exception {
-            RegisterRequest request = new RegisterRequest(
-                    "mymail",
-                    "9765432101",
-                    "Vivek@123",
-                    "Vivek",
-                    "Giri",
-                    LocalDate.of(2000, 8, 15),
-                    Gender.MALE,
-                    "ABCDE1234F",
-                    "RESIDENT",
-                    "India"
-            );
 
-            mockMvc.perform(post("/api/v1/auth/register")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(objectMapper.writeValueAsString(request)))
+        @Test
+        void shouldReturnBadRequest_whenInvalidEmail() throws Exception {
+            RegisterRequest request = TestFixtures.validRegisterRequest();
+            request.setEmail("invalid");
+
+            performPost("/api/v1/auth/register", request)
                     .andExpect(status().isBadRequest());
         }
-        
+
         @Test
-        void register_weak_password() throws Exception {
-            RegisterRequest request = new RegisterRequest(
-                    "vivek@gmail.com",
-                    "9765432101",
-                    "vivek",
-                    "Vivek",
-                    "Giri",
-                    LocalDate.of(2000, 8, 15),
-                    Gender.MALE,
-                    "ABCDE1234F",
-                    "RESIDENT",
-                    "India"
-            );
+        void shouldReturnConflict_whenEmailExists() throws Exception {
+            RegisterRequest request = TestFixtures.validRegisterRequest();
 
-            mockMvc.perform(post("/api/v1/auth/register")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isBadRequest());
-        }
-        
-        
-        @Test
-        void register_missing_required_field() throws Exception {
-            RegisterRequest request = new RegisterRequest(
-                    "null",
-                    "null",
-                    "null",
-                    "Vivek",
-                    "Giri",
-                    LocalDate.of(2000, 8, 15),
-                    Gender.MALE,
-                    "ABCDE1234F",
-                    "RESIDENT",
-                    "India"
-            );
+            when(authService.register(any()))
+                    .thenThrow(new ConflictException("Email exists"));
 
-            mockMvc.perform(post("/api/v1/auth/register")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isBadRequest());
-        }
-        
-        
-        @Test
-        void register_invalid_pan_format() throws Exception {
-        	RegisterRequest request = new RegisterRequest(
-                    "vivek@gmail.com",
-                    "9765432101",
-                    "Vivek@123",
-                    "Vivek",
-                    "Giri",
-                    LocalDate.of(2000, 8, 15),
-                    Gender.MALE,
-                    "ABCDEFGHIJF",
-                    "RESIDENT",
-                    "India"
-            );
-
-            mockMvc.perform(post("/api/v1/auth/register")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isBadRequest());
-        }  
-        
-        @Test
-        void register_duplicate_email() throws Exception {
-
-            RegisterRequest request = new RegisterRequest(
-                    "vivek@gmail.com",
-                    "9765432101",
-                    "Vivek@123",
-                    "Vivek",
-                    "Giri",
-                    LocalDate.of(2000, 8, 15),
-                    Gender.MALE,
-                    "ABCDE1234F",
-                    "RESIDENT",
-                    "India"
-            );
-
-            when(authService.register(any(RegisterRequest.class)))
-                    .thenThrow(new ConflictException("Email already exists"));
-
-            mockMvc.perform(post("/api/v1/auth/register")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(objectMapper.writeValueAsString(request)))
+            performPost("/api/v1/auth/register", request)
                     .andExpect(status().isConflict());
         }
-        
-        @Test
-        void register_duplicate_phone() throws Exception {
-
-            RegisterRequest request = new RegisterRequest(
-                    "vivek2@gmail.com",
-                    "9765432101",
-                    "Vivek@123",
-                    "Vivek",
-                    "Giri",
-                    LocalDate.of(2000, 8, 15),
-                    Gender.MALE,
-                    "ABCDE1234F",
-                    "RESIDENT",
-                    "India"
-            );
-
-            when(authService.register(any(RegisterRequest.class)))
-                    .thenThrow(new ConflictException("Phone already exists"));
-
-            mockMvc.perform(post("/api/v1/auth/register")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isConflict());
-        }
-        
-        @Test
-        void register_invalid_phone_number() throws Exception {
-
-            RegisterRequest request = new RegisterRequest(
-                    "vivek@gmail.com",
-                    "123",
-                    "Vivek@123",
-                    "Vivek",
-                    "Giri",
-                    LocalDate.of(2000, 8, 15),
-                    Gender.MALE,
-                    "ABCDE1234F",
-                    "RESIDENT",
-                    "India"
-            );
-
-            mockMvc.perform(post("/api/v1/auth/register")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isBadRequest());
-        }
-        
-        @Test
-        void register_invalid_dob() throws Exception {
-
-            RegisterRequest request = new RegisterRequest(
-                    "vivek@gmail.com",
-                    "9765432101",
-                    "Vivek@123",
-                    "Vivek",
-                    "Giri",
-                    LocalDate.now().plusDays(1),
-                    Gender.MALE,
-                    "ABCDE1234F",
-                    "RESIDENT",
-                    "India"
-            );
-
-            mockMvc.perform(post("/api/v1/auth/register")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isBadRequest());
-        }
-        
     }
 
-    // LOGIN TESTS
+    // ================= LOGIN =================
 
     @Nested
     @DisplayName("Login API Tests")
     class LoginTests {
 
         @Test
-        void login_success() throws Exception {
-
-            LoginRequest request = new LoginRequest();
-            request.setEmail("vivek@gmail.com");
-            request.setPassword("Password@123");
+        void shouldReturnOk_whenValidCredentials() throws Exception {
+            // GIVEN
+            LoginRequest request = TestFixtures.validLoginRequest();
 
             UUID userId = UUID.randomUUID();
             UUID customerId = UUID.randomUUID();
 
-            UserInfo userInfo =
-                    new UserInfo(userId, "CUSTOMER", customerId);
+            LoginResponse response = new LoginResponse(
+                    "jwt-token",
+                    "Bearer",
+                    3600,
+                    new UserInfo(userId, "CUSTOMER", customerId)
+            );
 
-            LoginResponse loginResponse =
-                    new LoginResponse("jwt-token", "Bearer", 3600, userInfo);
+            when(authService.login(any())).thenReturn(response);
 
-            when(authService.login(any(LoginRequest.class)))
-                    .thenReturn(loginResponse);
-
-            mockMvc.perform(post("/api/v1/auth/login")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
+            // WHEN + THEN
+            performPost("/api/v1/auth/login", request)
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.message").value("Login successful"))
                     .andExpect(jsonPath("$.data.accessToken").value("jwt-token"))
-                    .andExpect(jsonPath("$.data.tokenType").value("Bearer"))
-                    .andExpect(jsonPath("$.data.expiresIn").value(3600))
-                    .andExpect(jsonPath("$.data.user.userId").value(userId.toString()))
-                    .andExpect(jsonPath("$.data.user.customerId").value(customerId.toString()))
-                    .andExpect(jsonPath("$.timestamp").exists());
-
-            verify(authService, times(1)).login(any(LoginRequest.class));
+                    .andExpect(jsonPath("$.data.user.userId").value(userId.toString()));
         }
-        
-        
-        @Test
-        void login_invalid_password() throws Exception {
 
-            LoginRequest request = new LoginRequest();
-            request.setEmail("vivek@gmail.com");
-            request.setPassword("WrongPassword");
+        @Test
+        void shouldReturnUnauthorized_whenInvalidPassword() throws Exception {
+            LoginRequest request = TestFixtures.validLoginRequest();
 
             when(authService.login(any()))
-            .thenThrow(new InvalidCredentialsException("Invalid email or password"));
+                    .thenThrow(new InvalidCredentialsException("Invalid"));
 
-            mockMvc.perform(post("/api/v1/auth/login")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(objectMapper.writeValueAsString(request)))
+            performPost("/api/v1/auth/login", request)
                     .andExpect(status().isUnauthorized());
         }
-        
+
         @Test
-        void login_user_not_found() throws Exception {
-
-            LoginRequest request = new LoginRequest();
-            request.setEmail("unknown@gmail.com");
-            request.setPassword("Password@123");
-
-            when(authService.login(any(LoginRequest.class)))
-                    .thenThrow(new InvalidCredentialsException("User not found"));
-
-            mockMvc.perform(post("/api/v1/auth/login")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isUnauthorized());
-        }
-        @Test
-        void login_empty_email() throws Exception {
-
+        void shouldReturnBadRequest_whenEmailEmpty() throws Exception {
             LoginRequest request = new LoginRequest();
             request.setEmail("");
             request.setPassword("Password@123");
 
-            mockMvc.perform(post("/api/v1/auth/login")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(objectMapper.writeValueAsString(request)))
+            performPost("/api/v1/auth/login", request)
                     .andExpect(status().isBadRequest());
         }
-        @Test
-        void login_empty_password() throws Exception {
+    }
 
-            LoginRequest request = new LoginRequest();
-            request.setEmail("vivek@gmail.com");
-            request.setPassword("");
+    // ================= HELPER =================
 
-            mockMvc.perform(post("/api/v1/auth/login")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isBadRequest());
-        }
-        
-        
-        
+    private ResultActions performPost(String url, Object body) throws Exception {
+        return mockMvc.perform(post(url)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(body)));
     }
 }

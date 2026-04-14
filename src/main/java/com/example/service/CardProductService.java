@@ -25,7 +25,6 @@ public interface CardProductService {
 
     CardProductResponse update(UUID id, CardProductUpdateRequest request);
 
-    String updateStatus(UUID id, ProductStatus status);
     
     /**
      * Returns the raw {@link CreditCardProduct} entity for internal service-to-service use.

@@ -17,7 +17,7 @@ public class CreditCardStatusUpdateRequest {
     @Schema(
         description = "Card status",
         example = "ACTIVE",
-        allowableValues = {"PENDING_ACTIVATION", "ACTIVE", "BLOCKED", "EXPIRED", "CANCELLED"}
+        implementation = CardStatus.class
     )
     private CardStatus status;
 

@@ -7,19 +7,42 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * DTO for submitting KYC (Know Your Customer) document details.
+ * <p>
+ * This request captures the document type and its corresponding
+ * identification number for verification purposes.
+ * </p>
+ */
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
 @Schema(description = "Request object for submitting KYC document details")
 public class KycSubmitRequest {
 
-	@Schema(description = "Type of KYC document (PAN, AADHAR, PASSPORT, DRIVING_LICENSE)", example = "PAN", requiredMode = Schema.RequiredMode.REQUIRED)
-	@NotBlank(message = "Document type is required")
-	@Size(max = 30, message = "Document type cannot exceed 30 characters")
-	private String documentType;
+    /**
+     * Type of KYC document.
+     * Example values: PAN, AADHAR, PASSPORT, DRIVING_LICENSE
+     */
+    @Schema(
+        description = "Type of KYC document (PAN, AADHAR, PASSPORT, DRIVING_LICENSE)",
+        example = "PAN",
+        requiredMode = Schema.RequiredMode.REQUIRED
+    )
+    @NotBlank(message = "Document type is required")
+    @Size(max = 30, message = "Document type cannot exceed 30 characters")
+    private String documentType;
 
-	@Schema(description = "Document identification number", example = "ABCDE1234F", requiredMode = Schema.RequiredMode.REQUIRED)
-	@NotBlank(message = "Document number is required")
-	@Size(max = 20, message = "Document number cannot exceed 20 characters")
-	private String documentNumber;
+    /**
+     * Document identification number.
+     * Format depends on the document type (e.g., PAN format for PAN cards).
+     */
+    @Schema(
+        description = "Document identification number",
+        example = "ABCDE1234F",
+        requiredMode = Schema.RequiredMode.REQUIRED
+    )
+    @NotBlank(message = "Document number is required")
+    @Size(max = 20, message = "Document number cannot exceed 20 characters")
+    private String documentNumber;
 }

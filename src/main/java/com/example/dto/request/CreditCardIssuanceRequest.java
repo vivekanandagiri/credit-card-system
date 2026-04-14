@@ -28,7 +28,7 @@ public class CreditCardIssuanceRequest {
     @Schema(
         description = "Format of the card",
         example = "VIRTUAL",
-        allowableValues = {"VIRTUAL", "PHYSICAL"},
+        implementation = CardFormat.class,
         requiredMode = Schema.RequiredMode.REQUIRED
     )
     private CardFormat cardFormat;
@@ -36,7 +36,7 @@ public class CreditCardIssuanceRequest {
     @Schema(
         description = "Reason for card issuance",
         example = "NEW_CARD",
-        allowableValues = {"NEW_CARD", "REPLACEMENT", "UPGRADE"}
+        implementation = CardIssuanceReason.class
     )
     private CardIssuanceReason issuanceReason;
 }

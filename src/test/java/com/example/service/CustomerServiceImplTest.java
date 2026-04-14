@@ -5,6 +5,7 @@ import com.example.exception.ResourceNotFoundException;
 import com.example.repository.CustomerRepository;
 import com.example.service.ServiceImpl.CustomerServiceImpl;
 
+import com.example.testutil.TestFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -19,6 +20,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -39,37 +41,42 @@ class CustomerServiceImplTest {
     void setUp() {
         customerId = UUID.randomUUID();
         userId = UUID.randomUUID();
-
-        customer = new Customer();
-        customer.setCustomerId(customerId);
+        customer = TestFixtures.validCustomer();
     }
+
+    // ================= GET CUSTOMER =================
 
     @Nested
     @DisplayName("getCustomer")
     class GetCustomerTests {
 
         @Test
-        void shouldReturnCustomer_whenFound() {
+        void shouldReturnCustomer_whenCustomerExists() {
+            // GIVEN
             when(customerRepository.findById(customerId))
                     .thenReturn(Optional.of(customer));
 
+            // WHEN
             Customer result = customerService.getCustomer(customerId);
 
+            // THEN
             assertThat(result).isSameAs(customer);
             verify(customerRepository).findById(customerId);
         }
 
         @Test
-        void shouldThrowException_whenNotFound() {
+        void shouldThrowException_whenCustomerNotFound() {
+            // GIVEN
             when(customerRepository.findById(customerId))
                     .thenReturn(Optional.empty());
 
-            assertThrows(ResourceNotFoundException.class,
-                    () -> customerService.getCustomer(customerId));
-
-            verify(customerRepository).findById(customerId);
+            // WHEN + THEN
+            assertThatThrownBy(() -> customerService.getCustomer(customerId))
+                    .isInstanceOf(ResourceNotFoundException.class);
         }
     }
+
+    // ================= PAN EXISTS =================
 
     @Nested
     @DisplayName("panNumberExists")
@@ -83,16 +90,27 @@ class CustomerServiceImplTest {
             boolean result = customerService.panNumberExists("ABC123");
 
             assertThat(result).isTrue();
-            verify(customerRepository).existsByPanNumber("ABC123");
+        }
+
+        @Test
+        void shouldReturnFalse_whenPanDoesNotExist() {
+            when(customerRepository.existsByPanNumber("ABC123"))
+                    .thenReturn(false);
+
+            boolean result = customerService.panNumberExists("ABC123");
+
+            assertThat(result).isFalse();
         }
     }
+
+    // ================= SAVE CUSTOMER =================
 
     @Nested
     @DisplayName("saveCustomer")
     class SaveCustomerTests {
 
         @Test
-        void shouldSaveCustomer() {
+        void shouldSaveCustomerSuccessfully() {
             when(customerRepository.save(customer)).thenReturn(customer);
 
             Customer result = customerService.saveCustomer(customer);
@@ -101,6 +119,8 @@ class CustomerServiceImplTest {
             verify(customerRepository).save(customer);
         }
     }
+
+    // ================= CUSTOMER EXISTS =================
 
     @Nested
     @DisplayName("customerExists")
@@ -113,43 +133,52 @@ class CustomerServiceImplTest {
             boolean result = customerService.customerExists(customerId);
 
             assertThat(result).isTrue();
-            verify(customerRepository).existsById(customerId);
+        }
+
+        @Test
+        void shouldReturnFalse_whenCustomerDoesNotExist() {
+            when(customerRepository.existsById(customerId)).thenReturn(false);
+
+            boolean result = customerService.customerExists(customerId);
+
+            assertThat(result).isFalse();
         }
     }
+
+    // ================= GET BY USER =================
 
     @Nested
     @DisplayName("getCustomerByUserId")
     class GetCustomerByUserIdTests {
 
         @Test
-        void shouldReturnCustomer_whenFound() {
+        void shouldReturnCustomer_whenUserExists() {
             when(customerRepository.findByUserUserId(userId))
                     .thenReturn(Optional.of(customer));
 
             Customer result = customerService.getCustomerByUserId(userId);
 
             assertThat(result).isSameAs(customer);
-            verify(customerRepository).findByUserUserId(userId);
         }
 
         @Test
-        void shouldThrowException_whenNotFound() {
+        void shouldThrowException_whenUserNotFound() {
             when(customerRepository.findByUserUserId(userId))
                     .thenReturn(Optional.empty());
 
-            assertThrows(ResourceNotFoundException.class,
-                    () -> customerService.getCustomerByUserId(userId));
-
-            verify(customerRepository).findByUserUserId(userId);
+            assertThatThrownBy(() -> customerService.getCustomerByUserId(userId))
+                    .isInstanceOf(ResourceNotFoundException.class);
         }
     }
+
+    // ================= FIND OPTIONAL =================
 
     @Nested
     @DisplayName("findCustomerByUserId")
     class FindCustomerByUserIdTests {
 
         @Test
-        void shouldReturnOptionalCustomer_whenFound() {
+        void shouldReturnOptional_whenCustomerExists() {
             when(customerRepository.findByUserUserId(userId))
                     .thenReturn(Optional.of(customer));
 
@@ -160,7 +189,7 @@ class CustomerServiceImplTest {
         }
 
         @Test
-        void shouldReturnEmptyOptional_whenNotFound() {
+        void shouldReturnEmpty_whenCustomerNotFound() {
             when(customerRepository.findByUserUserId(userId))
                     .thenReturn(Optional.empty());
 

@@ -17,10 +17,9 @@ import java.util.UUID;
 
 /**
  * Implementation of {@link CustomerProfileService}.
- * Orchestrates customer profile retrieval and partial updates.
+ * Maintain customer profile retrieval and partial updates.
  */
-// SENIOR TWEAK: Defaulting to readOnly=true optimizes the Hibernate session 
-// by bypassing dirty-checking and allowing the DB to use read replicas for fetch operations.
+
 @Service
 @Transactional(readOnly = true)
 public class CustomerProfileServiceImpl implements CustomerProfileService {

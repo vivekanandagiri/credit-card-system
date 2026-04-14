@@ -38,6 +38,13 @@ public class RiskScoringService {
     private static final BigDecimal MIN_SCORE  = BigDecimal.ZERO;
     private static final BigDecimal MAX_SCORE  = new BigDecimal("100");
 
+    /**
+     * Risk Score Calculation
+     * @param ctx
+     * @param scoringRules
+     * @param ruleEvaluator
+     * @return
+     */
     public BigDecimal calculateRiskScore(ApplicationContext ctx,
                                          List<UnderwritingRule> scoringRules,
                                          RuleEvaluator ruleEvaluator) {
