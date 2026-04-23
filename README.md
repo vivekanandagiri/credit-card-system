@@ -1,6 +1,5 @@
 # 💳 Credit Card Issuing and Management System
 
--
 
 <h2 align="center">
   Backend system simulating real-world credit card processing (authorization, ledger, billing, payments)
@@ -21,9 +20,7 @@
   <img src="https://img.shields.io/github/forks/vivekanandagiri/credit-card-system?style=social" />
 </p>
 
-<p align="center">
-  <img src="docs/images/complete-flow.png" width="1000"/>
-</p>
+
 
 ## 📌 Overview
 
@@ -222,6 +219,11 @@ Balance = Credits - Debits
 - Applies late fees  
 
 ---
+
+## Complete Flow
+<p align="center">
+  <img src="docs/images/complete-flow.png" width="1000"/>
+</p>
 
 ## 🧱 Project Structure
 
