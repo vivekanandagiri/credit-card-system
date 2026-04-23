@@ -1,198 +1,781 @@
-# Credit Card Issuing and Management System
+# 💳 Credit Card Issuing and Management System
 
-## Overview
+## 📌 Overview
 
-The **Credit Card Issuing and Management System** is a backend application built using **Spring Boot** that simulates the core functionality of a credit card issuing platform.
-It allows customers to apply for credit cards, manage their profiles, submit KYC details, and enables administrators to manage credit card products and underwriting decisions.
+The **Credit Card Issuing and Management System** is a backend application built using **Spring Boot** that simulates a **real-world credit card issuing and processing platform**.
 
----
+The system models core financial workflows including:
 
-## Tech Stack
-
-* **Java 17**
-* **Spring Boot**
-* **Spring Security + JWT Authentication**
-* **Spring Data JPA**
-* **PostgreSQL**
-* **Flyway (Database Migration)**
-* **Swagger / OpenAPI**
-* **Maven**
-* **JUnit & Mockito for Testing**
+- Credit card application & underwriting  
+- Card issuance & lifecycle management  
+- Transaction processing with authorization lifecycle  
+- Ledger-based accounting (source of truth)  
+- Billing cycle & statement generation  
+- Interest calculation on revolving balances  
+- Payment processing with allocation logic  
+- Scheduled jobs for automated billing & due evaluation  
 
 ---
 
-## Key Features
+## 🛠 Tech Stack
 
-### Authentication & Security
-
-* User registration and login
-* JWT-based authentication
-* Role-based access control
-
-### Customer Management
-
-* Create and update customer profiles
-* Manage customer addresses
-* KYC submission and verification
-
-### Credit Card Management
-
-* Credit card product creation
-* Credit card application processing
-* Underwriting decision engine
-* Risk scoring and rule evaluation
-
-### API Documentation
-
-* Integrated **Swagger UI** for exploring APIs
+- Java 17  
+- Spring Boot  
+- Spring Security + JWT Authentication  
+- Spring Data JPA  
+- PostgreSQL  
+- Flyway (Database Migration)  
+- Swagger / OpenAPI  
+- Maven  
+- JUnit & Mockito  
 
 ---
 
-## Project Structure
+## 🚀 Key Features
 
-```
+### 🔐 Authentication & Security
+
+- User registration and login  
+- JWT-based authentication  
+- Role-based access control (Customer / Admin)  
+
+---
+
+### 👤 Customer & KYC Management
+
+- Create and update customer profiles  
+- Manage customer addresses  
+- KYC submission and verification  
+- Enforced KYC validation before credit application  
+
+---
+
+### 💳 Credit Card Application & Underwriting
+
+- Credit card application submission  
+- Validation rules:
+  - KYC must be approved  
+  - Credit score validation (300–900)  
+  - Duplicate application prevention  
+  - Active application limit  
+  - Rejection cooldown enforcement  
+- Integration with underwriting engine  
+- Auto account creation on approval  
+
+---
+
+### 🏦 Credit Account Management
+
+- Credit account creation from approved applications  
+- Account lifecycle:
+  - ACTIVE → SUSPENDED → BLOCKED → CLOSED  
+- Ownership validation for customers  
+- Admin-level account management  
+- Credit limit enforcement  
+
+---
+
+### 💳 Card Issuance & Lifecycle
+
+- Issue credit cards (customer & admin flows)  
+- Supports:
+  - Virtual cards  
+  - Physical cards (address required)  
+- Constraints:
+  - Max cards per account  
+  - Virtual card uniqueness  
+- Card lifecycle:
+  - PENDING → ACTIVE → BLOCKED / EXPIRED / CANCELLED  
+- Secure ownership validation  
+
+---
+
+### 💸 Transaction Processing Engine
+
+- Supports:
+  - Purchases  
+  - Refunds  
+- Validation pipeline:
+  - Card status & expiry  
+  - Channel validation (ATM / POS / ONLINE)  
+  - Daily spend limits  
+  - Credit limit validation using ledger  
+- Authorization-based processing (HOLD → CAPTURE)  
+- Declined transactions are persisted (audit compliance)  
+- Pagination & filtering support  
+
+---
+
+### 🏦 Authorization Lifecycle
+
+- AUTHORIZE → Reserve credit (hold)  
+- CAPTURE → Finalize transaction  
+- EXPIRE / REVERSE → Release unused holds  
+
+Key behaviors:
+
+- Holds reduce available credit  
+- Ledger updated only after capture  
+- Idempotency via network reference  
+
+---
+
+### 📒 Ledger System (Financial Core)
+
+- Append-only ledger (immutable entries)  
+- Entry types:
+  - DEBIT → increases outstanding balance  
+  - CREDIT → reduces outstanding balance  
+
+**Balance Formula:**
+
+Balance = Credits - Debits
+
+
+- Acts as the **single source of truth**  
+
+---
+
+### 📊 Billing & Statement Engine
+
+- Automatic & manual statement generation  
+- Timezone-aware billing cycles  
+- Prevents duplicate statements  
+- Calculates:
+  - Opening balance  
+  - Transactions  
+  - Interest  
+  - Minimum due  
+- Statement statuses:
+  - PAID  
+  - REVOLVING  
+  - OVERDUE  
+- Late fee handling  
+
+---
+
+### 📈 Interest Calculation Engine
+
+- Daily interest calculation (APR → Daily Rate)  
+- Time-segmented based on ledger entries  
+- Grace period support  
+- Accurate rounding using BigDecimal  
+
+---
+
+### 💰 Payment Processing System
+
+- Idempotent payment handling  
+- FIFO allocation across statements  
+- Supports:
+  - Partial payments  
+  - Multi-statement payments  
+  - Overpayments  
+- Updates:
+  - Ledger  
+  - Statements  
+  - Account balance  
+
+---
+
+### ⏰ Scheduled Billing & Automation
+
+#### Daily Jobs (UTC)
+
+**1. Statement Generation (00:00)**  
+- Generates statements based on billing cycle day  
+- Handles duplicate prevention  
+
+**2. Due Date Evaluation (00:15)**  
+- Evaluates:
+  - PAID  
+  - REVOLVING  
+  - OVERDUE  
+- Applies late fees  
+
+---
+
+## 🧱 Project Structure
+
+
 src/main/java/com/example
 │
-├── controller        # REST Controllers
-├── service           # Business logic
-├── repository        # Database access layer
-├── entity            # JPA entities
-├── dto               # Request & Response DTOs
-├── mapper            # Entity-DTO mapping
-├── security          # JWT & Spring Security config
-├── underwriting      # Decision engine & rule evaluation
-└── config            # Application configuration
-```
+├── controller
+├── service
+├── repository
+├── entity
+├── dto
+├── mapper
+├── security
+├── underwriting
+├── scheduler
+└── config
+
 
 ---
 
-## Database Migrations
+## 🗄 Database Migrations
 
-Database schema is managed using **Flyway**.
+Managed using Flyway
 
-Migration scripts are located in:
 
-```
 src/main/resources/db/migration
-```
 
-Example migrations include:
 
-* Customer and authentication tables
-* Address and residency tables
-* KYC records
-* Credit product definitions
-* Credit card applications
-* Underwriting rules
+Includes:
+
+- Customer & authentication  
+- KYC  
+- Credit products  
+- Accounts  
+- Cards  
+- Transactions  
+- Ledger  
+- Billing  
+- Payments  
 
 ---
 
-## Running the Project
+## ⚙️ Running the Project
 
-### 1. Clone the Repository
+### 1. Clone
 
-```
+
 git clone https://github.com/your-username/credit-card-system.git
-```
 
-### 2. Configure the Database
+cd credit-card-system
 
-Create a PostgreSQL database:
 
-```
+---
+
+### 2. Configure Database
+
+Create database:
+
+
 credit_card_system
-```
 
-Update configuration in `application.properties`.
+
+Update:
+
+
+application.properties
+
 
 ---
 
-### 3. Run the Application
+### 3. Run
 
-```
+
 mvn spring-boot:run
-```
 
-Application runs on:
 
-```
+App runs at:
+
+
 http://localhost:8082
-```
+
 
 ---
 
-## API Documentation
+## 📘 API Documentation
 
 Swagger UI:
 
-```
+
 http://localhost:8082/swagger-ui/index.html
-```
+
 
 ---
 
-## Testing
+## 🧪 Testing
 
-Run tests using:
 
-```
 mvn test
-```
+
 
 ---
 
-## API Documentation
+## 📸 Screenshots
 
-Swagger UI is available at:
+(Add your Swagger screenshots here)
+
+---
+
+## 🧱 Architecture
+
+Layered architecture:
+
+- Controller Layer  
+- Service Layer  
+- Repository Layer  
+- Security Layer  
+
+### Core Modules
+
+- Authorization  
+- Transaction  
+- Ledger  
+- Billing  
+- Payment  
+- Underwriting  
+
+---
+
+## 🔄 Core Financial Flows
+
+### Transaction Flow
+
+Request → Authorization (HOLD)
+→ Transaction Creation
+→ Ledger Update
+→ Capture
+
+
+### Billing Flow
+
+Ledger → Statement → Interest → Due Calculation
+
+
+### Payment Flow
+
+Payment → Ledger → Allocation → Account Update
+
+
+---
+
+## ⚠️ Important Notes
+
+- Ledger is the **source of truth**  
+- All operations are **transactional & consistent**  
+- Idempotency is enforced for critical flows  
+- Designed for scalability and extensibility  
+
+---
+
+## ✅ Features Implemented
+
+- JWT Authentication  
+- Role-Based Access Control  
+- Credit Card Application Workflow  
+- Underwriting System  
+- Credit Account Management  
+- Card Issuance & Lifecycle  
+- Transaction Processing Engine  
+- Authorization (Hold/Capture)  
+- Ledger-Based Accounting  
+- Billing & Statement Engine  
+- Interest Calculation  
+- Payment Processing & Allocation  
+- Scheduled Jobs  
+- RESTful APIs  
+- Unit Testing  
+
+---
+
+## 👨‍💻 Author
+
+**Vivekananda Giri**  
+Software Engineer | Backend Developer | Java & Spring Boot  
+
+---
+
+## ⭐ Future Improvements
+
+- Multi-currency support  
+- Event-driven architecture (Kafka)  
+- Fraud detection  
+- Notification system  
+- Microservices architecture  
+
+If you want, I can also:
+
+Add badges (GitHub, build, Java version)
+Create a diagram (very strong for interviews)
+Or shorten this into a perfect resume project description
+give the full readme.md so that i can copy and paste
+
+Here’s your clean, copy-paste ready README.md (no extra formatting issues, no IDs, just pure Markdown):
+
+# 💳 Credit Card Issuing and Management System
+
+## 📌 Overview
+
+The **Credit Card Issuing and Management System** is a backend application built using **Spring Boot** that simulates a **real-world credit card issuing and processing platform**.
+
+The system models core financial workflows including:
+
+- Credit card application & underwriting  
+- Card issuance & lifecycle management  
+- Transaction processing with authorization lifecycle  
+- Ledger-based accounting (source of truth)  
+- Billing cycle & statement generation  
+- Interest calculation on revolving balances  
+- Payment processing with allocation logic  
+- Scheduled jobs for automated billing & due evaluation  
+
+---
+
+## 🛠 Tech Stack
+
+- Java 17  
+- Spring Boot  
+- Spring Security + JWT Authentication  
+- Spring Data JPA  
+- PostgreSQL  
+- Flyway (Database Migration)  
+- Swagger / OpenAPI  
+- Maven  
+- JUnit & Mockito  
+
+---
+
+## 🚀 Key Features
+
+### 🔐 Authentication & Security
+
+- User registration and login  
+- JWT-based authentication  
+- Role-based access control (Customer / Admin)  
+
+---
+
+### 👤 Customer & KYC Management
+
+- Create and update customer profiles  
+- Manage customer addresses  
+- KYC submission and verification  
+- Enforced KYC validation before credit application  
+
+---
+
+### 💳 Credit Card Application & Underwriting
+
+- Credit card application submission  
+- Validation rules:
+  - KYC must be approved  
+  - Credit score validation (300–900)  
+  - Duplicate application prevention  
+  - Active application limit  
+  - Rejection cooldown enforcement  
+- Integration with underwriting engine  
+- Auto account creation on approval  
+
+---
+
+### 🏦 Credit Account Management
+
+- Credit account creation from approved applications  
+- Account lifecycle:
+  - ACTIVE → SUSPENDED → BLOCKED → CLOSED  
+- Ownership validation for customers  
+- Admin-level account management  
+- Credit limit enforcement  
+
+---
+
+### 💳 Card Issuance & Lifecycle
+
+- Issue credit cards (customer & admin flows)  
+- Supports:
+  - Virtual cards  
+  - Physical cards (address required)  
+- Constraints:
+  - Max cards per account  
+  - Virtual card uniqueness  
+- Card lifecycle:
+  - PENDING → ACTIVE → BLOCKED / EXPIRED / CANCELLED  
+- Secure ownership validation  
+
+---
+
+### 💸 Transaction Processing Engine
+
+- Supports:
+  - Purchases  
+  - Refunds  
+- Validation pipeline:
+  - Card status & expiry  
+  - Channel validation (ATM / POS / ONLINE)  
+  - Daily spend limits  
+  - Credit limit validation using ledger  
+- Authorization-based processing (HOLD → CAPTURE)  
+- Declined transactions are persisted (audit compliance)  
+- Pagination & filtering support  
+
+---
+
+### 🏦 Authorization Lifecycle
+
+- AUTHORIZE → Reserve credit (hold)  
+- CAPTURE → Finalize transaction  
+- EXPIRE / REVERSE → Release unused holds  
+
+Key behaviors:
+
+- Holds reduce available credit  
+- Ledger updated only after capture  
+- Idempotency via network reference  
+
+---
+
+### 📒 Ledger System (Financial Core)
+
+- Append-only ledger (immutable entries)  
+- Entry types:
+  - DEBIT → increases outstanding balance  
+  - CREDIT → reduces outstanding balance  
+
+**Balance Formula:**
+
+
+Balance = Credits - Debits
+
+
+- Acts as the **single source of truth**  
+
+---
+
+### 📊 Billing & Statement Engine
+
+- Automatic & manual statement generation  
+- Timezone-aware billing cycles  
+- Prevents duplicate statements  
+- Calculates:
+  - Opening balance  
+  - Transactions  
+  - Interest  
+  - Minimum due  
+- Statement statuses:
+  - PAID  
+  - REVOLVING  
+  - OVERDUE  
+- Late fee handling  
+
+---
+
+### 📈 Interest Calculation Engine
+
+- Daily interest calculation (APR → Daily Rate)  
+- Time-segmented based on ledger entries  
+- Grace period support  
+- Accurate rounding using BigDecimal  
+
+---
+
+### 💰 Payment Processing System
+
+- Idempotent payment handling  
+- FIFO allocation across statements  
+- Supports:
+  - Partial payments  
+  - Multi-statement payments  
+  - Overpayments  
+- Updates:
+  - Ledger  
+  - Statements  
+  - Account balance  
+
+---
+
+### ⏰ Scheduled Billing & Automation
+
+#### Daily Jobs (UTC)
+
+**1. Statement Generation (00:00)**  
+- Generates statements based on billing cycle day  
+- Handles duplicate prevention  
+
+**2. Due Date Evaluation (00:15)**  
+- Evaluates:
+  - PAID  
+  - REVOLVING  
+  - OVERDUE  
+- Applies late fees  
+
+---
+
+## 🧱 Project Structure
+
+
+src/main/java/com/example
+│
+├── controller
+├── service
+├── repository
+├── entity
+├── dto
+├── mapper
+├── security
+├── underwriting
+├── scheduler
+└── config
+
+
+---
+
+## 🗄 Database Migrations
+
+Managed using Flyway
+
+
+src/main/resources/db/migration
+
+
+Includes:
+
+- Customer & authentication  
+- KYC  
+- Credit products  
+- Accounts  
+- Cards  
+- Transactions  
+- Ledger  
+- Billing  
+- Payments  
+
+---
+
+## ⚙️ Running the Project
+
+### 1. Clone
+
+
+git clone https://github.com/your-username/credit-card-system.git
+
+cd credit-card-system
+
+
+---
+
+### 2. Configure Database
+
+Create database:
+
+
+credit_card_system
+
+
+Update:
+
+
+application.properties
+
+
+---
+
+### 3. Run
+
+
+mvn spring-boot:run
+
+
+App runs at:
+
+
+http://localhost:8082
+
+
+---
+
+## 📘 API Documentation
+
+Swagger UI:
+
 
 http://localhost:8082/swagger-ui/index.html
 
-Example API endpoints:
 
-* POST /api/auth/register
-* POST /api/auth/login
-* GET /api/credit-products
-* POST /api/credit-card-applications
+---
 
-Swagger Screenshot:
-
-<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/9388ea22-9e30-4f62-b283-87b21faae3e3" />
-<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/4c7476a6-d0be-4bb9-a7ce-69fe3e1be3fa" />
-<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/6f944ca2-be2f-42b2-9634-b7db3e2232d9" />
-<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/413b42ed-52a8-4822-8a37-125c031fa685" />
-## Architecture
-
-The application follows a layered architecture:
-
-Controller Layer
-Handles HTTP requests and responses.
-
-Service Layer
-Contains business logic.
-
-Repository Layer
-Handles database interaction using Spring Data JPA.
-
-Security Layer
-Manages authentication and authorization using JWT.
-
-Underwriting Engine
-Evaluates credit card applications using configurable rules and risk scoring.
-## Features Implemented
-
-* JWT Authentication
-* Role-Based Access Control
-* Credit Card Application Workflow
-* KYC Verification
-* Customer Profile Management
-* Flyway Database Migration
-* Risk Scoring Engine
-* Underwriting Decision System
-* RESTful API Design
-* Unit Testing with JUnit
+## 🧪 Testing
 
 
+mvn test
 
-**Vivekananda Giri**
 
-Software Engineer | Backend Developer | Java & Spring Boot
+---
+
+## 📸 Screenshots
+
+(Add your Swagger screenshots here)
+
+---
+
+## 🧱 Architecture
+
+Layered architecture:
+
+- Controller Layer  
+- Service Layer  
+- Repository Layer  
+- Security Layer  
+
+### Core Modules
+
+- Authorization  
+- Transaction  
+- Ledger  
+- Billing  
+- Payment  
+- Underwriting  
+
+---
+
+## 🔄 Core Financial Flows
+
+### Transaction Flow
+
+Request → Authorization (HOLD)
+→ Transaction Creation
+→ Ledger Update
+→ Capture
+
+
+### Billing Flow
+
+Ledger → Statement → Interest → Due Calculation
+
+
+### Payment Flow
+
+Payment → Ledger → Allocation → Account Update
+
+
+---
+
+## ⚠️ Important Notes
+
+- Ledger is the **source of truth**  
+- All operations are **transactional & consistent**  
+- Idempotency is enforced for critical flows  
+- Designed for scalability and extensibility  
+
+---
+
+## ✅ Features Implemented
+
+- JWT Authentication  
+- Role-Based Access Control  
+- Credit Card Application Workflow  
+- Underwriting System  
+- Credit Account Management  
+- Card Issuance & Lifecycle  
+- Transaction Processing Engine  
+- Authorization (Hold/Capture)  
+- Ledger-Based Accounting  
+- Billing & Statement Engine  
+- Interest Calculation  
+- Payment Processing & Allocation  
+- Scheduled Jobs  
+- RESTful APIs  
+- Unit Testing  
+
+---
+
+## 👨‍💻 Author
+
+**Vivekananda Giri**  
+Software Engineer | Backend Developer | Java & Spring Boot  
+
+---
