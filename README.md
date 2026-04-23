@@ -202,44 +202,44 @@ Balance = Credits - Debits
 
 src/main/java/com/example
 │
-├── api                 # API contracts / interfaces (if applicable)
-├── audit               # Auditing (logging, tracking changes)
-├── config              # Application configuration (beans, properties)
-├── controller          # REST Controllers (entry point)
+├── api                 # API contracts / interfaces
+├── audit               # Auditing (logging, tracking)
+├── config              # Configuration (beans, properties)
+├── controller          # REST controllers
 │
 ├── dto
 │   ├── request         # Incoming API payloads
 │   └── response        # Outgoing API responses
 │
-├── entity              # JPA entities (database models)
-├── enums               # Domain enums (status, types, etc.)
-├── exception           # Custom exception handling
-├── idempotency         # Idempotency handling (duplicate request protection By Caffine Cache)
+├── entity              # JPA entities
+├── enums               # Domain enums
+├── exception           # Custom exceptions
+├── idempotency         # Idempotency handling
 ├── mapper              # Entity ↔ DTO mapping
-├── repository          # Spring Data JPA repositories
-│
-├── security            # JWT, authentication & authorization
+├── repository          # JPA repositories
+├── security            # JWT & security config
 │
 ├── service             # Service interfaces
 ├── service/ServiceImpl # Business logic implementations
 │
-├── specification       # Dynamic query filters (JPA Specifications)
+├── specification       # JPA Specifications (filters)
 │
-├── underwriting        # Underwriting engine
-│   └── model           # Underwriting model for Credit application evaluation 
+├── underwriting
+│   └── model           # Underwriting models
 │
-├── util                # Utility classes (generators, schedulers, helpers)
+└── util                # Utilities (generators, schedulers)
+
 ## Resources Structure
 src/main/resources
 │
-├── db                  # Flyway migration scripts
+├── db                  # Flyway migrations
 ├── META-INF            # Metadata
-├── static              # Static resources (if any)
-├── templates           # Templates (if used)
+├── static              # Static files
+├── templates           # Templates
 │
 ├── application.properties
 ├── application-example.properties
-├── application-test.properties
+└── application-test.properties
 
 ## Test Resource
 
