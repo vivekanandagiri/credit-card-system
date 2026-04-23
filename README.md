@@ -14,9 +14,11 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/github/stars/your-username/credit-card-system?style=social" />
-  <img src="https://img.shields.io/github/forks/your-username/credit-card-system?style=social" />
+  <img src="https://img.shields.io/github/stars/vivekanandagiri/credit-card-system?style=social" />
+  <img src="https://img.shields.io/github/forks/vivekanandagiri/credit-card-system?style=social" />
 </p>
+
+
 --
 
 ## 📌 Overview
@@ -38,7 +40,6 @@ The system models core financial workflows including:
 
 ## 🛠 Tech Stack
 --
-
 - Java 17  
 - Spring Boot  
 - Spring Security + JWT Authentication  
@@ -47,8 +48,8 @@ The system models core financial workflows including:
 - Flyway (Database Migration)  
 - Swagger / OpenAPI  
 - Maven  
-- JUnit & Mockito
-- Caffine cache  
+- JUnit & Mockito  
+- Caffine Cache
 
 ---
 
