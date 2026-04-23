@@ -1,4 +1,23 @@
 # 💳 Credit Card Issuing and Management System
+--
+<p align="center">
+  Backend system simulating real-world credit card processing (authorization, ledger, billing, payments)
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Java-17-blue?style=for-the-badge&logo=java" />
+  <img src="https://img.shields.io/badge/Spring%20Boot-Framework-green?style=for-the-badge&logo=springboot" />
+  <img src="https://img.shields.io/badge/PostgreSQL-Database-blue?style=for-the-badge&logo=postgresql" />
+  <img src="https://img.shields.io/badge/Security-JWT-orange?style=for-the-badge&logo=jsonwebtokens" />
+  <img src="https://img.shields.io/badge/Maven-Build-red?style=for-the-badge&logo=apachemaven" />
+  <img src="https://img.shields.io/badge/Tested-JUnit%20%7C%20Mockito-yellow?style=for-the-badge" />
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/github/stars/your-username/credit-card-system?style=social" />
+  <img src="https://img.shields.io/github/forks/your-username/credit-card-system?style=social" />
+</p>
+--
 
 ## 📌 Overview
 
@@ -19,20 +38,6 @@ The system models core financial workflows including:
 
 ## 🛠 Tech Stack
 --
-<p align="center">
-  <img src="https://img.shields.io/badge/Java-17-blue?style=for-the-badge&logo=java" />
-  <img src="https://img.shields.io/badge/Spring%20Boot-Framework-green?style=for-the-badge&logo=springboot" />
-  <img src="https://img.shields.io/badge/PostgreSQL-Database-blue?style=for-the-badge&logo=postgresql" />
-  <img src="https://img.shields.io/badge/Security-JWT-orange?style=for-the-badge&logo=jsonwebtokens" />
-  <img src="https://img.shields.io/badge/Maven-Build-red?style=for-the-badge&logo=apachemaven" />
-  <img src="https://img.shields.io/badge/Tested-JUnit%20%7C%20Mockito-yellow?style=for-the-badge" />
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/github/stars/vivekanandagiri/credit-card-system?style=social" />
-  <img src="https://img.shields.io/github/forks/vivekanandagiri/credit-card-system?style=social" />
-</p>
-
 
 - Java 17  
 - Spring Boot  
@@ -42,7 +47,8 @@ The system models core financial workflows including:
 - Flyway (Database Migration)  
 - Swagger / OpenAPI  
 - Maven  
-- JUnit & Mockito  
+- JUnit & Mockito
+- Caffine cache  
 
 ---
 
@@ -246,6 +252,8 @@ src/main/java/com/example
 ```
 
 ## Resources Structure
+
+```text
 src/main/resources
 │
 ├── db                  # Flyway migrations
@@ -256,18 +264,23 @@ src/main/resources
 ├── application.properties
 ├── application-example.properties
 └── application-test.properties
+```
 
 ## Test Resource
 
+```text
 src/test/java          # Unit & integration tests
 src/test/resources     # Test configurations
+```
 
 ## 🗄 Database Migrations
 
 Managed using Flyway
 
 
+```
 src/main/resources/db/migration
+```
 
 
 Includes:
@@ -289,40 +302,39 @@ Includes:
 ### 1. Clone
 
 
+```
 git clone https://github.com/your-username/credit-card-system.git
+```
 
+```
 cd credit-card-system
-
+```
 
 ---
 
-### 2. Configure Database
+### 2. Configure the Database
 
-Create database:
+Create a PostgreSQL database:
 
-
+```
 credit_card_system
+```
 
-
-Update:
-
-
-application.properties
-
+Update configuration in `application.properties`.
 
 ---
 
-### 3. Run
+### 3. Run the Application
 
-
+```
 mvn spring-boot:run
+```
 
+Application runs on:
 
-App runs at:
-
-
+```
 http://localhost:8082
-
+```
 
 ---
 
@@ -330,19 +342,34 @@ http://localhost:8082
 
 Swagger UI:
 
-
+```
 http://localhost:8082/swagger-ui/index.html
-
+```
 
 ---
 
 ## 🧪 Testing
 
+Run tests using:
 
+```
 mvn test
-
+```
 
 ---
+
+## API Documentation
+
+Swagger UI is available at:
+
+http://localhost:8082/swagger-ui/index.html
+
+Example API endpoints:
+
+* POST /api/auth/register
+* POST /api/auth/login
+* GET /api/credit-products
+* POST /api/credit-account-applications
 
 ## 📸 Screenshots
 
@@ -350,21 +377,37 @@ mvn test
 
 ## 🧱 Architecture
 
-Layered architecture:
+## Architecture
 
-- Controller Layer  
-- Service Layer  
-- Repository Layer  
-- Security Layer  
+The application follows a layered architecture:
+
+### Controller Layer
+Handles HTTP requests and responses.
+
+### Service Layer
+Contains business logic.
+
+### Repository Layer
+Handles database interaction using Spring Data JPA.
+
+### Security Layer
+Manages authentication and authorization using JWT.
+
+### Underwriting Engine
+Evaluates credit card applications using configurable rules and risk scoring.
+ 
 
 ### Core Modules
 
+- User Authentication
+- Product Configuration
+- Credit Account and Under-writting Rule engine
+- Credit Card Issuing 
 - Authorization  
 - Transaction  
 - Ledger  
 - Billing  
 - Payment  
-- Underwriting  
 
 ---
 
@@ -390,22 +433,22 @@ Payment → Ledger → Allocation → Account Update
 
 ## ✅ Features Implemented
 
-- JWT Authentication  
-- Role-Based Access Control  
-- Credit Card Application Workflow  
-- Underwriting System  
-- Credit Account Management  
-- Card Issuance & Life-cycle  
-- Transaction Processing Engine  
-- Authorization (Hold/Capture)  
-- Ledger-Based Accounting  
-- Billing & Statement Engine  
-- Interest Calculation  
-- Payment Processing & Allocation  
-- Scheduled Jobs  
-- RESTful APIs  
-- Unit Testing  
-- Integration Testing
+* JWT Authentication  
+* Role-Based Access Control  
+* Credit Card Application Workflow  
+* Underwriting System  
+* Credit Account Management  
+* Card Issuance & Life-cycle  
+* Transaction Processing Engine  
+* Authorization (Hold and Capture) --> Instantly 
+* Ledger-Based Accounting  
+* Billing & Statement Engine  
+* Interest Calculation  
+* Payment Processing & Allocation  
+* Scheduled Jobs  
+* RESTful APIs  
+* Unit Testing  
+* Integration Testing
 ---
 
 ## 👨‍💻 Author
