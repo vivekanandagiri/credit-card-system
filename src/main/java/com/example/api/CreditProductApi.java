@@ -37,7 +37,7 @@ import jakarta.validation.Valid;
  *
  * <p>All responses are wrapped in {@link ApiResponse}
  */
-@Tag(name = "2. Credit Products", description = "APIs for managing credit products")
+@Tag(name = "02. Credit Products", description = "APIs for managing credit products")
 @RequestMapping("/api/v1/credit-products")
 public interface CreditProductApi {
 

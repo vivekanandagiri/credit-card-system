@@ -10,7 +10,6 @@ import com.example.service.CustomerProfileService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * REST Controller for managing Customer Profiles.
@@ -20,7 +19,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
  * on the interface to keep this implementation class clean and focused on HTTP routing.
  */
 @RestController
-@Tag(name = "Customer Profile Management", description = "Operations pertaining to the authenticated customer's profile")
 public class CustomerProfileController implements CustomerProfileApi {
 
     private final CustomerProfileService service;

@@ -1,8 +1,10 @@
 # 💳 Credit Card Issuing and Management System
---
-<p align="center">
+
+-
+
+<h2 align="center">
   Backend system simulating real-world credit card processing (authorization, ledger, billing, payments)
-</p>
+</h2>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Java-17-blue?style=for-the-badge&logo=java" />
@@ -11,6 +13,7 @@
   <img src="https://img.shields.io/badge/Security-JWT-orange?style=for-the-badge&logo=jsonwebtokens" />
   <img src="https://img.shields.io/badge/Maven-Build-red?style=for-the-badge&logo=apachemaven" />
   <img src="https://img.shields.io/badge/Tested-JUnit%20%7C%20Mockito-yellow?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/Cache-Caffeine%20(In--Memory)-brown?style=for-the-badge" />
 </p>
 
 <p align="center">
@@ -18,8 +21,9 @@
   <img src="https://img.shields.io/github/forks/vivekanandagiri/credit-card-system?style=social" />
 </p>
 
-
---
+<p align="center">
+  <img src="docs/images/complete-flow.png" width="1000"/>
+</p>
 
 ## 📌 Overview
 
@@ -373,8 +377,12 @@ Example API endpoints:
 * POST /api/credit-account-applications
 
 ## 📸 Screenshots
-
 ---
+
+<p align="center">
+  <img src="docs/images/swagger-api.jpeg" width="1000"/>
+</p>
+
 
 ## 🧱 Architecture
 

@@ -33,7 +33,7 @@ import jakarta.validation.Valid;
  *
  * <p>All responses are wrapped in {@link ApiResponse}
  */
-@Tag(name = "4. Customer Profile", description = "APIs for managing customer profile")
+@Tag(name = "04. Customer Profile", description = "APIs for managing customer profile")
 @RequestMapping("/api/v1/customers/profile")
 public interface CustomerProfileApi {
 
