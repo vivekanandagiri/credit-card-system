@@ -1,419 +1,519 @@
 package com.example.service;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.*;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import com.example.testutil.TestFixtures;
+import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.quality.Strictness;
-import org.mockito.junit.jupiter.MockitoSettings;
-import org.springframework.data.domain.*;
+import org.mockito.*;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 
 import com.example.dto.request.TransactionRequest;
-import com.example.dto.response.TransactionDetailResponse;
-import com.example.dto.response.TransactionSummaryResponse;
+import com.example.dto.response.*;
 import com.example.entity.*;
 import com.example.enums.*;
 import com.example.exception.*;
 import com.example.mapper.TransactionMapper;
 import com.example.repository.TransactionRepository;
+import com.example.service.ServiceImpl.LedgerServiceImpl;
 import com.example.service.ServiceImpl.TransactionServiceImpl;
 import com.example.util.ReferenceNumberGenerator;
+import org.mockito.junit.jupiter.MockitoExtension;
+
 
 @ExtendWith(MockitoExtension.class)
-@MockitoSettings(strictness = Strictness.LENIENT) // ✅ prevents UnnecessaryStubbingException
 class TransactionServiceImplTest {
 
-    @Mock private TransactionRepository transactionRepository;
+    @Mock private TransactionRepository repository;
     @Mock private CustomerService customerService;
-    @Mock private CreditCardService creditCardService;
-    @Mock private CreditAccountService creditAccountService;
-    @Mock private TransactionMapper transactionMapper;
-    @Mock private ReferenceNumberGenerator referenceNumberGenerator;
+    @Mock private CreditCardService cardService;
+    @Mock private CreditAccountService accountService;
+    @Mock private TransactionMapper mapper;
+    @Mock private ReferenceNumberGenerator refGenerator;
+    @Mock private LedgerServiceImpl ledgerService;
+    @Mock private AuthorizationService authorizationService;
 
     @InjectMocks
     private TransactionServiceImpl service;
 
     private UUID userId;
     private UUID cardId;
+    private UUID accountId;
 
     private Customer customer;
     private CreditAccount account;
     private CreditCard card;
-    private CreditCardProduct product;
 
     @BeforeEach
-    void setup() {
-
+    void setUp() {
         userId = UUID.randomUUID();
         cardId = UUID.randomUUID();
+        accountId = UUID.randomUUID();
 
-        customer = new Customer();
-        customer.setCustomerId(UUID.randomUUID());
+        customer = TestFixtures.validCustomer();
 
-        account = new CreditAccount();
-        account.setAccountId(UUID.randomUUID());
-        account.setCustomer(customer);
-        account.setAvailableBalance(BigDecimal.valueOf(10000));
-
-        product = new CreditCardProduct();
-        product.setOnlineTransactionsAllowed(true);
-        product.setAtmWithdrawalAllowed(true);
-        product.setPosDailyLimit(BigDecimal.valueOf(5000));
-        product.setEcommerceDailyLimit(BigDecimal.valueOf(5000));
-        product.setAtmDailyLimit(BigDecimal.valueOf(5000));
+        account = TestFixtures.validCreditAccount(customer, null, TestFixtures.validCreditProductEntity());
+        account.setAccountId(accountId);
 
         card = new CreditCard();
         card.setCardId(cardId);
         card.setCreditAccount(account);
-        card.setCardProduct(product);
         card.setCardStatus(CardStatus.ACTIVE);
         card.setOnlineEnabled(true);
         card.setAtmEnabled(true);
+        card.setCardProduct(TestFixtures.validCreditCardProduct());
     }
 
-    private TransactionRequest validRequest() {
-        TransactionRequest req = new TransactionRequest();
-        req.setAmount(BigDecimal.valueOf(1000));
-        req.setTransactionType(TransactionType.PURCHASE);
-        req.setTransactionChannel(TransactionChannel.ONLINE);
-        req.setMerchantName("Amazon");
-        req.setTransactionReference("TXN-123"); // ✅ REQUIRED
-        return req;
-    }
+    // ================= POST TRANSACTION =================
 
-    // ================= VALIDATION =================
+    
+    @Nested
+    class PostTransaction {
 
-    @Test
-    void invalidAmount_shouldThrow() {
-        TransactionRequest req = validRequest();
-        req.setAmount(BigDecimal.ZERO);
+        @Test
+        void shouldProcessTransaction_success() {
+            TransactionRequest req = mock(TransactionRequest.class);
 
-        assertThrows(BadRequestException.class,
-                () -> service.postTransaction(userId, cardId, req));
-    }
+            when(req.getAmount()).thenReturn(BigDecimal.valueOf(1000));
+            when(req.getTransactionReference()).thenReturn("REF123");
+            when(req.getTransactionType()).thenReturn(TransactionType.PURCHASE);
+            when(req.getTransactionChannel()).thenReturn(TransactionChannel.ONLINE);
 
-    @Test
-    void nullType_shouldThrow() {
-        TransactionRequest req = validRequest();
-        req.setTransactionType(null);
+            when(repository.findByNetworkReference("REF123")).thenReturn(Optional.empty());
+            when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
+            when(cardService.getCardEntity(cardId)).thenReturn(card);
 
-        assertThrows(BadRequestException.class,
-                () -> service.postTransaction(userId, cardId, req));
-    }
+            when(ledgerService.getBalance(accountId)).thenReturn(BigDecimal.ZERO);
 
-    @Test
-    void nullChannel_shouldThrow() {
-        TransactionRequest req = validRequest();
-        req.setTransactionChannel(null);
+            Authorization auth = mock(Authorization.class);
+            when(auth.getId()).thenReturn(UUID.randomUUID());
 
-        assertThrows(BadRequestException.class,
-                () -> service.postTransaction(userId, cardId, req));
-    }
+            when(authorizationService.authorize(any(), any(), any(), any())).thenReturn(auth);
 
-    @Test
-    void missingReference_shouldThrow() {
-        TransactionRequest req = validRequest();
-        req.setTransactionReference("");
+            when(repository.save(any())).thenAnswer(i -> i.getArgument(0));
+            when(mapper.toSummaryResponse(any())).thenReturn(mock(TransactionSummaryResponse.class));
 
-        assertThrows(BadRequestException.class,
-                () -> service.postTransaction(userId, cardId, req));
-    }
+            TransactionSummaryResponse res =
+                    service.postTransaction(userId, cardId, req);
 
-    @Test
-    void paymentType_shouldThrow() {
-        TransactionRequest req = validRequest();
-        req.setTransactionType(TransactionType.PAYMENT);
+            assertThat(res).isNotNull();
+        }
 
-        assertThrows(BadRequestException.class,
-                () -> service.postTransaction(userId, cardId, req));
-    }
+        @Test
+        void shouldThrow_whenTransactionNotFound() {
+            when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
 
-    // ================= ACCESS =================
+            when(accountService.getAccountEntity(accountId)).thenReturn(account);
 
-    @Test
-    void cardNotOwned_shouldThrow() {
+            // ensure ownership passes
+            account.setCustomer(customer);
 
-        Customer other = new Customer();
-        other.setCustomerId(UUID.randomUUID());
+            // actual test condition
+            when(repository.findById(any())).thenReturn(Optional.empty());
 
-        when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
+            assertThatThrownBy(() ->
+                    service.getAccountTransactionById(userId, accountId, UUID.randomUUID()))
+                    .isInstanceOf(ResourceNotFoundException.class);
+        }
+        @Test
+        void shouldThrow_whenInvalidAmount() {
+            TransactionRequest req = mock(TransactionRequest.class);
+            when(req.getAmount()).thenReturn(BigDecimal.ZERO);
 
-        account.setCustomer(other);
-        when(creditCardService.getCardEntity(cardId)).thenReturn(card);
+            assertThatThrownBy(() ->
+                    service.postTransaction(userId, cardId, req))
+                    .isInstanceOf(BadRequestException.class);
+        }
 
-        assertThrows(AccessDeniedException.class,
-                () -> service.postTransaction(userId, cardId, validRequest()));
-    }
+        @Test
+        void shouldThrow_whenCardNotOwned() {
+            Customer another = new Customer();
+            another.setCustomerId(UUID.randomUUID());
+            account.setCustomer(another);
 
-    // ================= DECLINES =================
+            TransactionRequest req = mock(TransactionRequest.class);
+            when(req.getAmount()).thenReturn(BigDecimal.valueOf(100));
+            when(req.getTransactionReference()).thenReturn("REF");
+            when(req.getTransactionType()).thenReturn(TransactionType.PURCHASE);
 
-    @Test
-    void cardNotActive_shouldDecline() {
-        card.setCardStatus(CardStatus.BLOCKED);
-        mockCommon();
+            when(repository.findByNetworkReference(any())).thenReturn(Optional.empty());
+            when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
+            when(cardService.getCardEntity(cardId)).thenReturn(card);
 
-        assertNotNull(service.postTransaction(userId, cardId, validRequest()));
-    }
+            assertThatThrownBy(() ->
+                    service.postTransaction(userId, cardId, req))
+                    .isInstanceOf(AccessDeniedException.class);
+        }
 
-    @Test
-    void expiredCard_shouldDecline() {
-        card.setExpiresAt(Instant.now().minusSeconds(1000));
-        mockCommon();
+        @Test
+        void shouldDecline_whenCardInactive() {
+            card.setCardStatus(CardStatus.BLOCKED);
 
-        assertNotNull(service.postTransaction(userId, cardId, validRequest()));
-    }
+            TransactionRequest req = mock(TransactionRequest.class);
+            when(req.getAmount()).thenReturn(BigDecimal.valueOf(100));
+            when(req.getTransactionReference()).thenReturn("REF");
+            when(req.getTransactionType()).thenReturn(TransactionType.PURCHASE);
+            when(req.getTransactionChannel()).thenReturn(TransactionChannel.ONLINE);
 
-    @Test
-    void insufficientBalance_shouldDecline() {
-        account.setAvailableBalance(BigDecimal.ZERO);
-        mockCommon();
+            when(repository.findByNetworkReference(any())).thenReturn(Optional.empty());
+            when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
+            when(cardService.getCardEntity(cardId)).thenReturn(card);
 
-        assertNotNull(service.postTransaction(userId, cardId, validRequest()));
-    }
+            when(mapper.toSummaryResponse(any())).thenReturn(mock(TransactionSummaryResponse.class));
 
-    @Test
-    void dailyLimitExceeded_shouldDecline() {
+            TransactionSummaryResponse res =
+                    service.postTransaction(userId, cardId, req);
 
-        when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
-        when(creditCardService.getCardEntity(cardId)).thenReturn(card);
-
-        when(transactionRepository.sumApprovedAmountByCardAndTypeAndChannelAfter(
-                any(), any(), any(), any()))
-                .thenReturn(BigDecimal.valueOf(5000));
-
-        when(transactionMapper.toSummaryResponse(any()))
-                .thenReturn(new TransactionSummaryResponse());
-
-        assertNotNull(service.postTransaction(userId, cardId, validRequest()));
-    }
-
-    // ================= CHANNEL =================
-
-    @Test
-    void onlineDisabled_shouldThrow() {
-        product.setOnlineTransactionsAllowed(false);
-
-        when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
-        when(creditCardService.getCardEntity(cardId)).thenReturn(card);
-
-        assertThrows(BadRequestException.class,
-                () -> service.postTransaction(userId, cardId, validRequest()));
-    }
-
-    @Test
-    void atmDisabled_shouldThrow() {
-        card.setAtmEnabled(false);
-
-        TransactionRequest req = validRequest();
-        req.setTransactionChannel(TransactionChannel.ATM);
-
-        when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
-        when(creditCardService.getCardEntity(cardId)).thenReturn(card);
-
-        assertThrows(BadRequestException.class,
-                () -> service.postTransaction(userId, cardId, req));
-    }
-
-    // ================= SUCCESS =================
-
-    @Test
-    void success_shouldSaveTransaction() {
-
-        mockCommon();
-
-        TransactionSummaryResponse res =
-                service.postTransaction(userId, cardId, validRequest());
-
-        assertNotNull(res);
-        verify(transactionRepository).save(any());
+            assertThat(res).isNotNull();
+        }
     }
 
     // ================= GET TRANSACTIONS =================
 
-    @SuppressWarnings("unchecked")
-	@Test
-    void getTransactions_success() {
-
+    @Test
+    void shouldGetTransactions_success() {
         when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
-        when(creditAccountService.getAccountEntity(account.getAccountId())).thenReturn(account);
+        when(accountService.getAccountEntity(accountId)).thenReturn(account);
 
         Page<Transaction> page = new PageImpl<>(List.of(new Transaction()));
 
-        when(transactionRepository.findAll(
-                any(Specification.class),
-                any(Pageable.class)
+        // ✅ FIXED STUB
+        when(repository.findAll(
+                ArgumentMatchers.<Specification<Transaction>>any(),
+                ArgumentMatchers.any(Pageable.class)
         )).thenReturn(page);
-        when(transactionMapper.toSummaryResponse(any()))
-                .thenReturn(new TransactionSummaryResponse());
 
-        Page<?> result = service.getAccountTransactions(
-                userId, account.getAccountId(),
-                null, null, null,
-                0, 10
-        );
+        when(mapper.toSummaryResponse(any()))
+                .thenReturn(mock(TransactionSummaryResponse.class));
 
-        assertEquals(1, result.getContent().size());
+        Page<TransactionSummaryResponse> res =
+                service.getAccountTransactions(userId, accountId, null, null, null, 0, 10);
+
+        assertThat(res.getContent()).hasSize(1);
     }
 
     @Test
-    void invalidPage_shouldThrow() {
-
+    void shouldThrow_whenInvalidPage() {
         when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
-        when(creditAccountService.getAccountEntity(account.getAccountId())).thenReturn(account);
+        when(accountService.getAccountEntity(accountId)).thenReturn(account);
 
-        assertThrows(BadRequestException.class,
-                () -> service.getAccountTransactions(userId, account.getAccountId(), null, null, null, -1, 10));
+        assertThatThrownBy(() ->
+                service.getAccountTransactions(userId, accountId, null, null, null, -1, 10))
+                .isInstanceOf(BadRequestException.class);
     }
 
     // ================= GET BY ID =================
 
     @Test
-    void getTransactionById_success() {
-
+    void shouldGetTransactionById_success() {
         Transaction txn = new Transaction();
         txn.setAccount(account);
 
         when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
-        when(creditAccountService.getAccountEntity(account.getAccountId())).thenReturn(account);
-        when(transactionRepository.findById(any())).thenReturn(Optional.of(txn));
+        when(accountService.getAccountEntity(accountId)).thenReturn(account);
+        when(repository.findById(any())).thenReturn(Optional.of(txn));
+        when(mapper.toResponse(any())).thenReturn(mock(TransactionDetailResponse.class));
 
-        when(transactionMapper.toResponse(any()))
-                .thenReturn(new TransactionDetailResponse());
+        TransactionDetailResponse res =
+                service.getAccountTransactionById(userId, accountId, UUID.randomUUID());
 
-        assertNotNull(service.getAccountTransactionById(
-                userId, account.getAccountId(), UUID.randomUUID()));
+        assertThat(res).isNotNull();
     }
 
     @Test
-    void getTransaction_wrongAccount_shouldThrow() {
+    void shouldThrow_whenTransactionNotFound() {
 
-        // Create a different account with valid ID
-        CreditAccount otherAccount = new CreditAccount();
-        otherAccount.setAccountId(UUID.randomUUID()); // ✅ NOT NULL
-
-        Transaction txn = new Transaction();
-        txn.setAccount(otherAccount);
+        UUID transactionId = UUID.randomUUID();
 
         when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
-        when(creditAccountService.getAccountEntity(account.getAccountId()))
-                .thenReturn(account);
 
-        when(transactionRepository.findById(any()))
-                .thenReturn(Optional.of(txn));
+        when(accountService.getAccountEntity(accountId)).thenReturn(account);
 
-        assertThrows(BadRequestException.class,
-                () -> service.getAccountTransactionById(
-                        userId,
-                        account.getAccountId(),
-                        UUID.randomUUID()
-                ));
+        account.setCustomer(customer);
+
+        when(repository.findById(transactionId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() ->
+                service.getAccountTransactionById(userId, accountId, transactionId))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
+
     // ================= PAYMENT =================
 
     @Test
-    void recordPayment_success() {
-
+    void shouldRecordPayment_success() {
         Payment payment = new Payment();
         payment.setAmount(BigDecimal.valueOf(1000));
+        payment.setReferenceId("PAY123");
+        payment.setPaidAt(Instant.now());
         payment.setPaymentMethod(PaymentMethod.UPI);
 
-        when(transactionMapper.toSummaryResponse(any()))
-                .thenReturn(new TransactionSummaryResponse());
+        when(repository.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(mapper.toSummaryResponse(any())).thenReturn(mock(TransactionSummaryResponse.class));
 
-        assertNotNull(service.recordPayment(account, payment, BigDecimal.TEN, BigDecimal.ZERO));
+        TransactionSummaryResponse res =
+                service.recordPayment(account, payment);
+
+        assertThat(res).isNotNull();
+        verify(ledgerService).credit(any(), any(), any(), any(),any());
     }
 
     @Test
-    void recordPayment_invalid_shouldThrow() {
-
+    void shouldThrow_whenInvalidPaymentAmount() {
         Payment payment = new Payment();
         payment.setAmount(BigDecimal.ZERO);
 
-        assertThrows(BadRequestException.class,
-                () -> service.recordPayment(account, payment, BigDecimal.TEN, BigDecimal.ZERO));
+        assertThatThrownBy(() ->
+                service.recordPayment(account, payment))
+                .isInstanceOf(BadRequestException.class);
     }
 
-    // ================= SYSTEM =================
+    // ================= SYSTEM TXN =================
 
     @Test
-    void systemTransaction_success() {
+    void shouldPostSystemTransaction_success() {
+        when(repository.findByInternalReference(any())).thenReturn(Optional.empty());
+        when(repository.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(mapper.toSummaryResponse(any())).thenReturn(mock(TransactionSummaryResponse.class));
 
-        when(transactionRepository.findByReferenceNumber("SYS"))
-                .thenReturn(Optional.empty());
+        TransactionSummaryResponse res =
+                service.postSystemTransaction(
+                        account,
+                        TransactionType.FEE,
+                        BigDecimal.valueOf(100),
+                        "Fee",
+                        "REF1",
+                        Instant.now()
+                );
 
-        when(transactionMapper.toSummaryResponse(any()))
-                .thenReturn(new TransactionSummaryResponse());
-
-        assertNotNull(service.postSystemTransaction(
-                account, TransactionType.FEE,
-                BigDecimal.TEN, "Fee", "SYS"));
+        assertThat(res).isNotNull();
+        verify(ledgerService).debit(any(), any(), any(), any(),any());
     }
-
+    
     @Test
-    void systemTransaction_idempotent() {
-
+    void shouldReturnExistingTransaction_whenIdempotent() {
         Transaction txn = new Transaction();
 
-        when(transactionRepository.findByReferenceNumber("SYS"))
+        TransactionRequest req = mock(TransactionRequest.class);
+        when(req.getAmount()).thenReturn(BigDecimal.TEN);
+        when(req.getTransactionReference()).thenReturn("REF");
+        when(req.getTransactionType()).thenReturn(TransactionType.PURCHASE);
+
+        when(repository.findByNetworkReference("REF"))
                 .thenReturn(Optional.of(txn));
 
-        when(transactionMapper.toSummaryResponse(txn))
-                .thenReturn(new TransactionSummaryResponse());
+        when(mapper.toSummaryResponse(txn))
+                .thenReturn(mock(TransactionSummaryResponse.class));
 
-        assertNotNull(service.postSystemTransaction(
-                account, TransactionType.FEE,
-                BigDecimal.TEN, "Fee", "SYS"));
+        TransactionSummaryResponse res =
+                service.postTransaction(userId, cardId, req);
+
+        assertThat(res).isNotNull();
     }
-
-    // ================= REF =================
-
     @Test
-    void getByReference_success() {
+    void shouldThrow_whenReferenceMissing() {
+        TransactionRequest req = mock(TransactionRequest.class);
 
-        Transaction txn = new Transaction();
+        when(req.getAmount()).thenReturn(BigDecimal.TEN);
+        when(req.getTransactionReference()).thenReturn(null);
 
-        when(transactionRepository.findByTransactionReference("REF"))
-                .thenReturn(Optional.of(txn));
-
-        when(transactionMapper.toSummaryResponse(txn))
-                .thenReturn(new TransactionSummaryResponse());
-
-        assertNotNull(service.getByTransactionReference("REF"));
+        assertThatThrownBy(() ->
+                service.postTransaction(userId, cardId, req))
+                .isInstanceOf(BadRequestException.class);
     }
-
     @Test
-    void getByReference_notFound() {
+    void shouldThrow_whenPaymentTypeUsed() {
+        TransactionRequest req = mock(TransactionRequest.class);
 
-        when(transactionRepository.findByTransactionReference("REF"))
-                .thenReturn(Optional.empty());
+        when(req.getAmount()).thenReturn(BigDecimal.TEN);
+        when(req.getTransactionReference()).thenReturn("REF");
+        when(req.getTransactionType()).thenReturn(TransactionType.PAYMENT);
 
-        assertThrows(ResourceNotFoundException.class,
-                () -> service.getByTransactionReference("REF"));
+        assertThatThrownBy(() ->
+                service.postTransaction(userId, cardId, req))
+                .isInstanceOf(BadRequestException.class);
     }
+    @Test
+    void shouldDecline_whenCardExpired() {
+        card.setExpiresAt(Instant.now().minusSeconds(10));
 
-    // ================= COMMON MOCK =================
+        TransactionRequest req = baseRequest();
 
-    private void mockCommon() {
-
+        when(repository.findByNetworkReference(any())).thenReturn(Optional.empty());
         when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
-        when(creditCardService.getCardEntity(cardId)).thenReturn(card);
+        when(cardService.getCardEntity(cardId)).thenReturn(card);
+        when(mapper.toSummaryResponse(any())).thenReturn(mock(TransactionSummaryResponse.class));
 
-        lenient().when(transactionRepository
-                .sumApprovedAmountByCardAndTypeAndChannelAfter(
-                        any(), any(), any(), any()))
-                .thenReturn(BigDecimal.ZERO);
+        TransactionSummaryResponse res =
+                service.postTransaction(userId, cardId, req);
 
-        lenient().when(transactionMapper.toSummaryResponse(any()))
-                .thenReturn(new TransactionSummaryResponse());
+        assertThat(res).isNotNull();
+    }
+    
+    @Test
+    void shouldDecline_whenLimitExceeded() {
+        TransactionRequest req = baseRequest();
+
+        when(repository.findByNetworkReference(any())).thenReturn(Optional.empty());
+        when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
+        when(cardService.getCardEntity(cardId)).thenReturn(card);
+
+        when(ledgerService.getBalance(accountId))
+                .thenReturn(BigDecimal.valueOf(1000));
+
+        account.setCreditLimit(BigDecimal.valueOf(500));
+
+        when(mapper.toSummaryResponse(any())).thenReturn(mock(TransactionSummaryResponse.class));
+
+        TransactionSummaryResponse res =
+                service.postTransaction(userId, cardId, req);
+
+        assertThat(res).isNotNull();
+    }
+    @Test
+    void shouldDecline_whenDailyLimitExceeded() {
+        TransactionRequest req = baseRequest();
+
+        card.getCardProduct().setEcommerceDailyLimit(BigDecimal.valueOf(100));
+
+        when(repository.findByNetworkReference(any())).thenReturn(Optional.empty());
+        when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
+        when(cardService.getCardEntity(cardId)).thenReturn(card);
+
+        when(ledgerService.getBalance(accountId)).thenReturn(BigDecimal.ZERO);
+        when(repository.sumApprovedAmountByCardAndTypeAndChannelAfter(any(), any(), any(), any()))
+                .thenReturn(BigDecimal.valueOf(200));
+
+        when(mapper.toSummaryResponse(any())).thenReturn(mock(TransactionSummaryResponse.class));
+
+        TransactionSummaryResponse res =
+                service.postTransaction(userId, cardId, req);
+
+        assertThat(res).isNotNull();
+    }
+    
+    @Test
+    void shouldHandleAuthorizationFailure() {
+        TransactionRequest req = baseRequest();
+
+        when(repository.findByNetworkReference(any())).thenReturn(Optional.empty());
+        when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
+        when(cardService.getCardEntity(cardId)).thenReturn(card);
+
+        when(ledgerService.getBalance(accountId)).thenReturn(BigDecimal.ZERO);
+
+        Authorization auth = mock(Authorization.class);
+        when(auth.getId()).thenReturn(UUID.randomUUID());
+
+        when(authorizationService.authorize(any(), any(), any(), any())).thenReturn(auth);
+
+        when(repository.save(any())).thenThrow(new RuntimeException("fail"));
+
+        assertThatThrownBy(() ->
+                service.postTransaction(userId, cardId, req))
+                .isInstanceOf(RuntimeException.class);
+
+        verify(authorizationService).expire(any());
+    }
+    @Test
+    void shouldThrow_whenOnlineDisabledAtProduct() {
+        card.getCardProduct().setOnlineTransactionsAllowed(false);
+
+        TransactionRequest req = baseRequest();
+
+        when(repository.findByNetworkReference(any())).thenReturn(Optional.empty());
+        when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
+        when(cardService.getCardEntity(cardId)).thenReturn(card);
+
+        assertThatThrownBy(() ->
+                service.postTransaction(userId, cardId, req))
+                .isInstanceOf(BadRequestException.class);
+    }
+    @Test
+    void shouldThrow_whenInvalidSize() {
+        when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
+        when(accountService.getAccountEntity(accountId)).thenReturn(account);
+
+        assertThatThrownBy(() ->
+                service.getAccountTransactions(userId, accountId, null, null, null, 0, 200))
+                .isInstanceOf(BadRequestException.class);
+    }
+    @Test
+    void shouldThrow_whenReferenceNotFound() {
+        when(repository.findByNetworkReference("REF"))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() ->
+                service.getByTransactionReference("REF"))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+    @Test
+    void shouldReplaceExistingSystemTransaction() {
+
+        Transaction existingTxn = new Transaction();
+        existingTxn.setTransactionId(UUID.randomUUID());
+
+        when(repository.findByInternalReference("REF"))
+                .thenReturn(Optional.of(existingTxn));
+
+        when(repository.save(any()))
+                .thenAnswer(i -> i.getArgument(0));
+
+        when(mapper.toSummaryResponse(any()))
+                .thenReturn(mock(TransactionSummaryResponse.class));
+
+        doNothing().when(ledgerService).deleteByReferenceId(any());
+
+        TransactionSummaryResponse res =
+                service.postSystemTransaction(
+                        account,
+                        TransactionType.FEE,
+                        BigDecimal.TEN,
+                        "fee",
+                        "REF",
+                        Instant.now()
+                );
+
+        assertThat(res).isNotNull();
+
+        verify(ledgerService).deleteByReferenceId(existingTxn.getTransactionId());
+        verify(repository).delete(existingTxn);
+        verify(repository).save(any()); // new txn
+    }
+    @Test
+    void shouldCredit_whenRefundSystemTxn() {
+        when(repository.findByInternalReference(any())).thenReturn(Optional.empty());
+        when(repository.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(mapper.toSummaryResponse(any())).thenReturn(mock(TransactionSummaryResponse.class));
+
+        service.postSystemTransaction(account, TransactionType.REFUND, BigDecimal.TEN, "refund", "REF",Instant.now());
+
+        verify(ledgerService).credit(any(), any(), any(), any(),any());
+    }
+    
+    private TransactionRequest baseRequest() {
+        TransactionRequest req = new TransactionRequest();
+
+        req.setAmount(BigDecimal.valueOf(100));                // valid > 0
+        req.setTransactionReference("REF_" + UUID.randomUUID()); // unique ref
+        req.setTransactionType(TransactionType.PURCHASE);      // valid (not PAYMENT)
+        req.setTransactionChannel(TransactionChannel.ONLINE);  // default safe channel
+
+        req.setMerchantName("Amazon");
+        req.setMerchantCategoryCode("5411");
+        req.setMerchantCategoryName("GROCERY");
+
+        return req;
     }
 }

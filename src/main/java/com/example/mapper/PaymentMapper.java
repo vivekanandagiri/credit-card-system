@@ -10,9 +10,31 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.util.List;
 
+/**
+ * Mapper responsible for converting {@link Payment} entities
+ * into API response DTOs.
+ *
+ * <p>This mapper handles:</p>
+ * <ul>
+ *     <li>Transformation of {@link Payment} → {@link PaymentResponse}</li>
+ *     <li>Nested mapping of allocation details</li>
+ *     <li>Ensuring null-safe financial calculations</li>
+ * </ul>
+ *
+ * <p><b>Important:</b> Financial values are handled using {@link BigDecimal}
+ * to maintain precision.</p>
+ */
 @Component
 public class PaymentMapper {
 
+    /**
+     * Converts a {@link Payment} entity into a {@link PaymentResponse}.
+     *
+     * <p>Includes mapping of all associated payment allocations.</p>
+     *
+     * @param payment the payment entity
+     * @return mapped response DTO
+     */
     public PaymentResponse toResponse(Payment payment) {
 
         List<PaymentAllocationResponse> allocations =
@@ -33,24 +55,50 @@ public class PaymentMapper {
                 .build();
     }
 
+    /**
+     * Maps a {@link PaymentAllocation} entity into
+     * {@link PaymentAllocationResponse}.
+     *
+     * <p>Calculation logic:</p>
+     * <ul>
+     *     <li><b>remainingAfter</b> → current remaining balance on statement</li>
+     *     <li><b>remainingBefore</b> → remainingAfter + allocated amount</li>
+     * </ul>
+     *
+     * <p>Also ensures:
+     * <ul>
+     *     <li>null-safe handling of remaining amount</li>
+     *     <li>no negative remaining balances</li>
+     * </ul>
+     * </p>
+     *
+     * @param allocation payment allocation entity
+     * @return mapped allocation response
+     */
     private PaymentAllocationResponse mapAllocation(
             PaymentAllocation allocation) {
 
         BillingStatement statement = allocation.getStatement();
 
-        BigDecimal remaining =
+        BigDecimal allocated = allocation.getAllocatedAmount();
+
+        BigDecimal remainingAfter =
                 statement.getRemainingAmount() != null
                         ? statement.getRemainingAmount()
                         : BigDecimal.ZERO;
 
-        if (remaining.compareTo(BigDecimal.ZERO) < 0) {
-            remaining = BigDecimal.ZERO;
+        // Ensure no negative values
+        if (remainingAfter.compareTo(BigDecimal.ZERO) < 0) {
+            remainingAfter = BigDecimal.ZERO;
         }
+
+        BigDecimal remainingBefore = remainingAfter.add(allocated);
 
         return PaymentAllocationResponse.builder()
                 .statementId(statement.getStatementId())
-                .allocatedAmount(allocation.getAllocatedAmount())
-                .totalAmountDue(statement.getTotalAmountDue())
+                .allocatedAmount(allocated)
+                .remainingBeforeAllocation(remainingBefore)
+                .remainingAfterAllocation(remainingAfter)
                 .build();
     }
 }

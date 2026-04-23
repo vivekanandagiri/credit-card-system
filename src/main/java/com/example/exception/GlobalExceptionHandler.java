@@ -1,5 +1,6 @@
 package com.example.exception;
 
+import com.example.dto.response.ApiResponse;
 import com.example.dto.response.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
@@ -12,6 +13,7 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.time.Instant;
 import java.util.Arrays;
@@ -138,6 +140,16 @@ public class GlobalExceptionHandler {
         log.warn("Bad request: {}", ex.getMessage());
         return ResponseEntity.badRequest()
                 .body(build(HttpStatus.BAD_REQUEST, ex.getMessage(), request));
+    }
+    
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<String>> handleMaxSizeException(
+            MaxUploadSizeExceededException ex) {
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(
+                        "File size exceeds allowed limit "
+                ));
     }
 
     // ========================= 401 UNAUTHORIZED =========================

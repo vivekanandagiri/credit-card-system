@@ -3,6 +3,7 @@ package com.example.service;
 import com.example.dto.response.BillingStatementResponse;
 import com.example.entity.BillingStatement;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -95,6 +96,8 @@ public interface BillingStatementService {
 	List<BillingStatementResponse> getCustomerStatementsByAccount(UUID userId, UUID accountId);
 
 	List<BillingStatement> getUnpaidStatementsOldestFirst(UUID accountId);
+
+	BillingStatementResponse generateStatementForDate(UUID accountId, LocalDate inputDate);
 
     
 }

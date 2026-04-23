@@ -40,7 +40,7 @@ import jakarta.validation.Valid;
  * Authenticated user is injected via {@link CustomUserPrincipal}.
  */
 @RequestMapping("/api/v1")
-@Tag(name = "Credit Card API", description = "APIs for managing credit cards")
+@Tag(name = "9. Credit Card API", description = "APIs for managing credit cards")
 public interface CreditCardApi {
 
     /**

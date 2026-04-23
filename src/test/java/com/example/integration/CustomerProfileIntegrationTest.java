@@ -3,7 +3,6 @@ package com.example.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.time.LocalDate;
 import java.util.UUID;
 
 import com.example.dto.request.CustomerProfileUpdateRequest;

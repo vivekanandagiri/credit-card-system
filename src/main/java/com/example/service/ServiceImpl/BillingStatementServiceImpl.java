@@ -10,10 +10,11 @@ import com.example.enums.TransactionType;
 import com.example.exception.BadRequestException;
 import com.example.mapper.BillingStatementMapper;
 import com.example.repository.BillingStatementRepository;
+import com.example.repository.LedgerEntryRepository;
 import com.example.repository.PaymentAllocationRepository;
-import com.example.repository.TransactionRepository;
 import com.example.service.*;
 
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -33,24 +34,24 @@ import java.util.UUID;
  * handling billing cycle execution, statement generation, interest calculation,
  * payment evaluation, and delinquency handling.</p>
  *
- * <p><b>Key Responsibilities:</b></p>
+ * <h3>Key Responsibilities</h3>
  * <ul>
- *     <li>Generate billing statements (automated & manual)</li>
+ *     <li>Generate billing statements (automated and manual)</li>
  *     <li>Ensure idempotent and timezone-aware billing execution</li>
  *     <li>Calculate balances, interest, and minimum dues</li>
  *     <li>Track payment outcomes (PAID, REVOLVING, OVERDUE)</li>
  *     <li>Apply penalties such as late fees</li>
  * </ul>
  *
- * <p><b>Financial Safety Guarantees:</b></p>
+ * <h3>Financial Safety Guarantees</h3>
  * <ul>
- *     <li>All monetary calculations use {@link java.math.BigDecimal}</li>
- *     <li>Operations are idempotent to support retry-safe batch jobs</li>
- *     <li>Timezone-aware to prevent incorrect billing execution</li>
+ *     <li>All monetary calculations use {@link BigDecimal}</li>
+ *     <li>Operations are idempotent (safe for retries)</li>
+ *     <li>Timezone-aware processing</li>
  * </ul>
  *
- * <p><b>Important:</b> This is a critical financial component. Any modification
- * must preserve ledger consistency and audit correctness.</p>
+ * <p><b>Important:</b> This is a critical financial component.
+ * Any modification must preserve ledger integrity and audit correctness.</p>
  */
 @Service
 @Transactional(readOnly = true)
@@ -59,33 +60,30 @@ import java.util.UUID;
 public class BillingStatementServiceImpl implements BillingStatementService {
 
     private final BillingStatementRepository billingRepository;
-    private final TransactionRepository transactionRepository;
     private final TransactionService transactionService;
     private final CreditAccountService accountService;
     private final BillingStatementMapper mapper;
     private final TimezoneResolver timezoneResolver;
     private final InterestCalculationService interestService;
     private final PaymentAllocationRepository paymentAllocationRepository;
+    private final LedgerEntryRepository ledgerEntryRepository;
+    private final EntityManager entityManager;
 
     /**
      * Generates a billing statement for the given account.
      *
-     * <p>This method executes the full billing cycle pipeline:</p>
+     * <p>Execution pipeline:</p>
      * <ol>
-     *     <li>Validate billing cycle date</li>
-     *     <li>Ensure idempotency (prevent duplicates)</li>
-     *     <li>Determine billing period</li>
-     *     <li>Aggregate transactions (debits & credits)</li>
-     *     <li>Calculate interest</li>
-     *     <li>Compute balances and dues</li>
-     *     <li>Persist statement and update account</li>
+     *     <li>Validate billing cycle</li>
+     *     <li>Prevent duplicate generation</li>
+     *     <li>Compute balances & interest</li>
+     *     <li>Persist statement</li>
+     *     <li>Update account snapshot</li>
      * </ol>
      *
-     * <p><b>Idempotency:</b> Ensures safe re-execution during batch retries.</p>
-     *
-     * @param accountId the credit account ID
-     * @return generated billing statement response
-     * @throws BadRequestException if billing cycle not reached or duplicate detected
+     * @param accountId credit account ID
+     * @return generated statement response
+     * @throws BadRequestException if cycle not reached or duplicate exists
      */
     @Override
     @Transactional // Override for write operation
@@ -94,74 +92,22 @@ public class BillingStatementServiceImpl implements BillingStatementService {
         ZoneId zone = timezoneResolver.resolve(account.getCustomer());
 
         ZonedDateTime now = ZonedDateTime.now(zone);
-        LocalDate today = now.toLocalDate();
+        LocalDate today = resolveBillingDate(
+                now.toLocalDate(),
+                account.getStatementCycleDay()
+        );
 
-        log.debug("Initiating statement generation | accountId={} | date={}", accountId, today);
+        log.info("Initiating statement generation | accountId={} | date={}", accountId, today);
 
+        // 1. Billing cycle validation
         validateBillingCycle(account, today);
+        // 2. Prevent duplicate statement FIRST
         preventDuplicate(accountId, today);
 
-        //Fetch latest previous statement (if exists)
-        Optional<BillingStatement> lastStatementOpt = billingRepository
-                .findTopByAccountOrderByBillingPeriodEndDesc(account);
-
-        LocalDate startDate = resolveStartDate(account, lastStatementOpt, zone);
-        LocalDate endDate = today;
-
-        Instant start = startDate.atStartOfDay(zone).toInstant();
-        Instant end = endDate.plusDays(1).atStartOfDay(zone).toInstant();
-
-        BigDecimal totalDebits = defaultZero(transactionRepository.sumDebitsForPeriod(accountId, start, end));
-        BigDecimal totalCredits = defaultZero(transactionRepository.sumCreditsForPeriod(accountId, start, end));
-
-        BigDecimal openingBalance = defaultZero(account.getLastStatementBalance());
-
-        BigDecimal interest = interestService.calculateInterest(
-                accountId, start, end, account, lastStatementOpt.orElse(null), zone
-        );
-
-        if (interest.compareTo(BigDecimal.ZERO) > 0) {
-
-            String ref = "INT-" + account.getAccountId() + "-" + endDate;
-
-            transactionService.postSystemTransaction(
-                    account,
-                    TransactionType.INTEREST,
-                    interest,
-                    "Interest Charged",
-                    ref
-            );
-        }
-        BigDecimal closingBalance = calculateClosingBalance(openingBalance, totalDebits, totalCredits, interest);
-        BigDecimal totalDue = closingBalance.max(BigDecimal.ZERO);
-        BigDecimal minDue = calculateMinimumDue(account, closingBalance);
-
-        LocalDate dueDate = endDate.plusDays(account.getGracePeriodDays());
-
-        BillingStatement statement = buildStatement(
-                account, startDate, endDate, openingBalance, totalDebits, totalCredits,
-                interest, closingBalance, totalDue, minDue, dueDate, now
-        );
-
-        log.info("Saving statement | accountId={} | totalDue={} | minDue={}",
-                accountId, totalDue, minDue);
-        
-        BillingStatement saved = billingRepository.save(statement);
-
-        log.info("Statement saved | statementId={} | accountId={}",
-                saved.getStatementId(), accountId);
-        accountService.updateAccountAfterBilling(
-                accountId,
-                now.toInstant(),
-                closingBalance,
-                dueDate.atStartOfDay(zone).toInstant(),
-                minDue
-        );
-
-        log.info("Statement generated successfully | accountId={}", accountId);
-
-        return mapper.toResponse(saved);
+        // 3-9. Execute full statement generation pipeline
+        return executeStatementPipeline(account, zone, now, today);
     }
+
     /**
      * Generates a billing statement bypassing billing cycle validation.
      *
@@ -172,7 +118,7 @@ public class BillingStatementServiceImpl implements BillingStatementService {
      *     <li>Testing scenarios</li>
      * </ul>
      *
-     * <p><b>Note:</b> Still enforces duplicate prevention.</p>
+     * <p>Still enforces duplicate prevention.</p>
      *
      * @param accountId credit account ID
      * @return generated billing statement
@@ -185,83 +131,45 @@ public class BillingStatementServiceImpl implements BillingStatementService {
         ZoneId zone = timezoneResolver.resolve(account.getCustomer());
 
         ZonedDateTime now = ZonedDateTime.now(zone);
-        LocalDate today = now.toLocalDate();
-
+        LocalDate today = resolveBillingDate(
+                now.toLocalDate(),
+                account.getStatementCycleDay()
+        );
         log.info("Manual statement generation | accountId={} | date={}", accountId, today);
 
-        // Skip billing cycle validation
-
         // Still prevent duplicates
-        boolean exists = billingRepository
-                .existsByAccountAccountIdAndBillingPeriodEnd(accountId, today);
+        preventDuplicate(accountId, today);
 
-        if (exists) {
-            throw new BadRequestException("Statement already generated for today");
-        }
+        // Execute full statement generation pipeline
+        return executeStatementPipeline(account, zone, now, today);
+    }
 
-        Optional<BillingStatement> lastStatementOpt =
-                billingRepository.findTopByAccountOrderByBillingPeriodEndDesc(account);
+    /**
+     * Generates a statement for a specific date (testing/support use).
+     *
+     * @param accountId account ID
+     * @param inputDate forced billing date
+     * @return generated statement
+     */
+    @Transactional
+    public BillingStatementResponse generateStatementForDate(UUID accountId, LocalDate inputDate) {
 
-        LocalDate startDate = lastStatementOpt
-                .map(s -> s.getBillingPeriodEnd().plusDays(1))
-                .orElse(account.getActivatedAt().atZone(zone).toLocalDate());
+        CreditAccount account = accountService.getAccountEntity(accountId);
+        ZoneId zone = timezoneResolver.resolve(account.getCustomer());
 
-        LocalDate endDate = today;
+        ZonedDateTime now = inputDate.atStartOfDay(zone);
 
-        Instant start = startDate.atStartOfDay(zone).toInstant();
-        Instant end = endDate.plusDays(1).atStartOfDay(zone).toInstant();
-
-        BigDecimal totalDebits = defaultZero(
-                transactionRepository.sumDebitsForPeriod(accountId, start, end));
-
-        BigDecimal totalCredits = defaultZero(
-                transactionRepository.sumCreditsForPeriod(accountId, start, end));
-
-        BigDecimal openingBalance = defaultZero(account.getLastStatementBalance());
-
-        BigDecimal interest = interestService.calculateInterest(
-                accountId, start, end, account, lastStatementOpt.orElse(null), zone
+        LocalDate today = resolveBillingDate(
+                inputDate,
+                account.getStatementCycleDay()
         );
 
-        BigDecimal closingBalance =
-                openingBalance.add(totalDebits).subtract(totalCredits).add(interest);
+        log.info("Manual TEST statement generation | accountId={} | forcedDate={} | resolvedCycleDate={}",
+                accountId, inputDate, today);
 
-        BigDecimal totalDue = closingBalance.max(BigDecimal.ZERO);
+        preventDuplicate(accountId, today);
 
-        BigDecimal minDue = calculateMinimumDue(account, closingBalance);
-
-        LocalDate dueDate = endDate.plusDays(account.getGracePeriodDays());
-
-        BillingStatement statement = buildStatement(
-                account,
-                startDate,
-                endDate,
-                openingBalance,
-                totalDebits,
-                totalCredits,
-                interest,
-                closingBalance,
-                totalDue,
-                minDue,
-                dueDate,
-                now
-        );
-
-        BillingStatement saved = billingRepository.save(statement);
-
-        // Update account
-        accountService.updateAccountAfterBilling(
-                accountId,
-                now.toInstant(),
-                closingBalance,
-                dueDate.atStartOfDay(zone).toInstant(),
-                minDue
-        );
-
-        log.info("Manual statement generated | accountId={} | statementId={}",
-                accountId, saved.getStatementId());
-
-        return mapper.toResponse(saved);
+        return executeStatementPipeline(account, zone, now, today);
     }
     /**
      * Evaluates all statements whose due date has passed.
@@ -286,15 +194,21 @@ public class BillingStatementServiceImpl implements BillingStatementService {
                         today
                 );
 
-        for (BillingStatement statement : dueStatements) {
-            evaluateDueDateOutcome(statement);
-        }
+        log.info("Processing {} due statements for date={}", dueStatements.size(), today);
 
+        for (BillingStatement statement : dueStatements)try {
+            evaluateDueDateOutcome(statement);
+
+        } catch (Exception ex) {
+            log.error("Failed to evaluate due statement | statementId={} | error={}",
+                    statement.getStatementId(), ex.getMessage(), ex);
+            // Continue processing remaining statements; don't abort the entire batch.
+        }
         billingRepository.saveAll(dueStatements);
     }
     /**
-     * * Mark Due Statement for Reminder(e.g 7 days before due date )
-     *  @param dueReminderDays Reminder customer before the dues dates
+     * * Mark Due Statement for Reminder(e.g., 7 days before due date)
+     *  @param dueReminderDays Reminder customer before the due dates
      */
     @Override
     public void markDueStatements(int dueReminderDays) {
@@ -312,7 +226,10 @@ public class BillingStatementServiceImpl implements BillingStatementService {
     
     
     /**
-     * Get Particular Billing statement by statementId
+     * Fetch a billing statement by ID.
+     *
+     * @param statementId statement ID
+     * @return billing statement
      */
     @Override
     public BillingStatement getStatement(UUID statementId) {
@@ -321,7 +238,10 @@ public class BillingStatementServiceImpl implements BillingStatementService {
     }
     
     /**
-     * 
+     * Fetch a billing statement with lock (for update operations).
+     *
+     * @param statementId statement ID
+     * @return billing statement
      */
     @Override
     public BillingStatement getStatementForUpdate(UUID statementId) {
@@ -331,7 +251,10 @@ public class BillingStatementServiceImpl implements BillingStatementService {
     
     
     /**
-     * Updates an existing statement, Save called by payment service.
+     * Persists updated billing statement.
+     *
+     * @param statement statement entity
+     * @return saved entity
      */
     @Override
     public BillingStatement save(BillingStatement statement) {
@@ -339,7 +262,10 @@ public class BillingStatementServiceImpl implements BillingStatementService {
     }
 
     /**
-     * Get All the Statements for a Particular account of a customer
+     * Retrieves all statements for an account.
+     *
+     * @param accountId account ID
+     * @return list of statements
      */
     @Override
     @Transactional(readOnly = true)
@@ -357,9 +283,11 @@ public class BillingStatementServiceImpl implements BillingStatementService {
     }
 
     /**
-     * Retrieves all billing statements for a specific account with strict ownership validation.
-     * <p>
-     * Note:The customer must prove the provided userId owns the requested accountId.
+     * Retrieves statements for an account with ownership validation.
+     *
+     * @param userId    user ID
+     * @param accountId account ID
+     * @return list of statements
      */
     @Override
     @Transactional(readOnly = true)
@@ -367,7 +295,7 @@ public class BillingStatementServiceImpl implements BillingStatementService {
             UUID userId,
             UUID accountId) {
 
-        // Fetch account
+        // Fetch an account
         CreditAccount account = accountService.getAccountEntity(accountId);
 
         // Ownership validation
@@ -386,14 +314,107 @@ public class BillingStatementServiceImpl implements BillingStatementService {
     }
     
     
-    //=============================================Helper Methods ====================================================
+    //============================================= Helper Methods ====================================================
+    /**
+     * extracted the shared billing pipeline that was common between automated and manual generation to avoid code duplication.
+     * @param account credit account
+     * @param zone    customer's resolved time zone
+     * @param now     current zoned date-time
+     * @param today   current local date in customer's time zone
+     * @return generated billing statement response
+     */
+    private BillingStatementResponse executeStatementPipeline(
+            CreditAccount account,
+            ZoneId zone,
+            ZonedDateTime now,
+            LocalDate today) {
+
+        UUID accountId = account.getAccountId();
+
+        Optional<BillingStatement> lastStatementOpt = billingRepository
+                .findTopByAccountOrderByBillingPeriodEndDesc(account);
+        BillingStatement lastStatement = lastStatementOpt.orElse(null);
+
+        boolean updated = ensureLateFeeAppliedIfOverdue(lastStatement, zone);
+        if (updated) {
+            billingRepository.save(lastStatement);
+        }
+        
+        LocalDate startDate = resolveStartDate(account, lastStatementOpt, zone);
+        Instant start = startDate.atStartOfDay(zone).toInstant();
+        Instant end = today.plusDays(1).atStartOfDay(zone).toInstant();
+
+        BigDecimal openingBalance = defaultZero(account.getLastStatementBalance());
+
+        // 4. CALCULATE + POST-INTEREST FIRST
+        BigDecimal interest = interestService.calculateInterest(
+                accountId, start, end, account, lastStatementOpt.orElse(null), zone
+        );
+        if (interest.compareTo(BigDecimal.ZERO) > 0) {
+            postInterestTransaction(account, today, zone, interest);
+        }
+        // 6.FETCH LEDGER AFTER INTEREST
+        BigDecimal totalDebits = defaultZero(ledgerEntryRepository.sumDebitsForPeriod(accountId, start, end));
+        BigDecimal totalCredits = defaultZero(ledgerEntryRepository.sumCreditsForPeriod(accountId, start, end));
+        // 7. FINAL CALCULATION (Closing balance (ledger is 'source' of truth))
+        BigDecimal closingBalance =
+                openingBalance
+                        .add(totalDebits)
+                        .subtract(totalCredits);
+        BigDecimal totalDue = closingBalance.max(BigDecimal.ZERO);
+        BigDecimal minDue = calculateMinimumDue(account, closingBalance);
+        LocalDate dueDate = today.plusDays(account.getGracePeriodDays());
+        // 8. Build statement
+        BillingStatement statement = buildStatement(
+                account, startDate, today, openingBalance, totalDebits, totalCredits,
+                interest, closingBalance, totalDue, minDue, dueDate,BigDecimal.ZERO, now
+        );
+        log.info("Saving statement | accountId={} | totalDue={} | minDue={}",
+                accountId, totalDue, minDue);
+        BillingStatement saved = billingRepository.save(statement);
+        log.info("Statement saved | statementId={} | accountId={}",
+                saved.getStatementId(), accountId);
+        //  9. Update account snapshot (last statement balance, due date, minimum due)
+        accountService.updateAccountAfterBilling(
+                accountId,
+                now.toInstant(),
+                closingBalance,
+                dueDate.atStartOfDay(zone).toInstant(),
+                minDue
+        );
+
+        log.info("Statement generated successfully | accountId={}", accountId);
+        return mapper.toResponse(saved);
+    }
     
     /**
+     * Posts interest as a system transaction.
+     */
+    private void postInterestTransaction(
+            CreditAccount account,
+            LocalDate today,
+            ZoneId zone,
+            BigDecimal interest) {
+
+        String ref = "INT-" +
+                account.getAccountId().toString().substring(0, 8) +
+                "-" + today.toString().replace("-", "");
+
+        Instant interestTime = today.atTime(23, 59).atZone(zone).toInstant();
+
+        transactionService.postSystemTransaction(
+                account,
+                TransactionType.INTEREST,
+                interest,
+                "Interest Charged",
+                ref,
+                interestTime
+        );
+
+        entityManager.flush();
+    }
+    /**
      * Enforces the billing schedule based on the customer's localized timezone.
-     * <p>
-     * Architecture Note: Throwing an exception here during a batch job acts as a safe 
-     * "skip" mechanism, ensuring we don't accidentally generate a statement days early 
-     * due to a UTC vs. Local Timezone offset mismatch.
      * @param account Credit Account
      * @param today Today
      */
@@ -410,6 +431,24 @@ public class BillingStatementServiceImpl implements BillingStatementService {
 
             throw new BadRequestException("Billing cycle not reached yet");
         }
+    }
+
+    /**
+     * Billing Date Resolve
+     * @param baseDate
+     * @param cycleDay
+     * @return
+     */
+    private LocalDate resolveBillingDate(LocalDate baseDate, int cycleDay) {
+
+        LocalDate cycleDateThisMonth = safeBillingDate(baseDate, cycleDay);
+
+        if (baseDate.isBefore(cycleDateThisMonth)) {
+            LocalDate previousMonth = baseDate.minusMonths(1);
+            return safeBillingDate(previousMonth, cycleDay);
+        }
+
+        return cycleDateThisMonth;
     }
 
     /**
@@ -433,9 +472,9 @@ public class BillingStatementServiceImpl implements BillingStatementService {
 
     /**
      * Determines the exact start date for the new billing cycle to ensure zero gaps in the ledger.
-     * Financial Compliance: If the customer has a previous statement, the new period MUST start 
+     * If the customer has a previous statement, the new period MUST start 
      * exactly 1 day after the last period ended. 
-     * If this is their first ever statement,it falls back to the exact date the account was activated.
+     * If this is their first ever statement, it falls back to the exact date the account was activated.
      * @param account Credit Account
      * @param lastStatement Last Billing statement
      * @param zone Timezone
@@ -450,32 +489,17 @@ public class BillingStatementServiceImpl implements BillingStatementService {
     }
 
     /**
-     * Closing Balance Calculation
-     * @param opening Opening balance
-     * @param debits total debits transactions
-     * @param credits total credit transactions
-     * @param interest total Interest
-     * @return Closing balance
-     */
-    private BigDecimal calculateClosingBalance(BigDecimal opening,
-                                               BigDecimal debits,
-                                               BigDecimal credits,
-                                               BigDecimal interest) {
-        return opening.add(debits).subtract(credits).add(interest);
-    }
-
-    /**
      * Calculates the minimum payment required for a billing cycle.
      *
      * <p><b>Rules:</b></p>
      * <ul>
      *     <li>If balance ≤ 0 → minimum due = 0</li>
-     *     <li>Minimum due = max(percentage of balance, product floor amount)</li>
+     *     <li>Minimum due = max (percentage of balance, product floor amount)</li>
      *     <li>Capped at total closing balance</li>
      * </ul>
      *
      * <p><b>Formula:</b><br>
-     * min(max(closingBalance × percentage, floorAmount), closingBalance)</p>
+     * min (max(closingBalance × percentage, floorAmount), closingBalance)</p>
      *
      * @param account credit account
      * @param closingBalance closing balance
@@ -547,6 +571,7 @@ public class BillingStatementServiceImpl implements BillingStatementService {
             BigDecimal totalDue,
             BigDecimal minDue,
             LocalDate dueDate,
+            BigDecimal lateFee,
             ZonedDateTime now
     ) {
         BillingStatement statement = new BillingStatement();
@@ -565,6 +590,9 @@ public class BillingStatementServiceImpl implements BillingStatementService {
         statement.setMinDuePercent(account.getMinimumDuePercent());
         statement.setMinDueFloor(account.getCreditProduct().getMinimumDueAmount());
         statement.setDueDate(dueDate);
+        statement.setLateFee(
+        	    lateFee != null ? lateFee : BigDecimal.ZERO
+        	);
         statement.setAmountPaid(BigDecimal.ZERO);
         statement.setStatementStatus(StatementStatus.GENERATED);
         statement.setGeneratedAt(now.toInstant());
@@ -638,25 +666,36 @@ public class BillingStatementServiceImpl implements BillingStatementService {
             return;
         }
 
-        BigDecimal lateFee = 
-        		statement.getAccount()
-        		.getCreditProduct()
-        		.getLateFeeAmount();
+        ZoneId zone = timezoneResolver.resolve(
+                statement.getAccount().getCustomer()
+        );
+
+        BigDecimal lateFee =
+                statement.getAccount()
+                        .getCreditProduct()
+                        .getLateFeeAmount();
+
+        Instant feeTime = statement.getDueDate()
+                .atTime(23, 59)
+                .atZone(zone)
+                .toInstant();
 
         statement.setLateFee(lateFee);
         statement.setLateFeeApplied(true);
-        statement.setLateFeeAppliedAt(Instant.now());
+        statement.setLateFeeAppliedAt(feeTime);  
 
         statement.setRemainingAmount(
                 statement.getRemainingAmount().add(lateFee)
-        
         );
+
         statement.setTotalAmountDue(
                 statement.getTotalAmountDue().add(lateFee)
         );
+
         statement.setClosingBalance(
                 statement.getClosingBalance().add(lateFee)
         );
+
         String ref = "LATE-" + statement.getStatementId();
 
         transactionService.postSystemTransaction(
@@ -664,7 +703,8 @@ public class BillingStatementServiceImpl implements BillingStatementService {
                 TransactionType.FEE,
                 lateFee,
                 "Late Fee",
-                ref
+                ref,
+                feeTime  
         );
     }
 
@@ -690,10 +730,37 @@ public class BillingStatementServiceImpl implements BillingStatementService {
     	// Prevents the "February 30th" bug
         return baseDate.withDayOfMonth(Math.min(cycleDay, baseDate.lengthOfMonth()));
     }
+    
+    /**
+     * Call By payment system 
+     */
 	@Override
 	public List<BillingStatement> getUnpaidStatementsOldestFirst(UUID accountId) {
 		return billingRepository.findUnpaidStatementsOldestFirst(accountId);
 	}
+	
+	/**
+	 * Late fee post if it is overdue
+	 * @param lastStatement
+	 * @param zone
+	 * @return
+	 */
+	private boolean ensureLateFeeAppliedIfOverdue(BillingStatement lastStatement, ZoneId zone) {
 
+	    if (lastStatement == null) return false;
+
+	    if (Boolean.TRUE.equals(lastStatement.getLateFeeApplied())) return false;
+
+	    LocalDate today = LocalDate.now(zone);
+
+	    if (today.isAfter(lastStatement.getDueDate())
+	            && lastStatement.getRemainingAmount().compareTo(BigDecimal.ZERO) > 0) {
+
+	        applyLateFee(lastStatement);
+	        return true;
+	    }
+
+	    return false;
+	}
 
 }

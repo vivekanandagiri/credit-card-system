@@ -244,74 +244,74 @@ public class CreditAccountServiceImpl implements CreditAccountService {
                         customerId, creditProductId, AccountStatus.ACTIVE);
     }
  
-    /**
-     * {@inheritDoc}
-     *
-     * <p>Called by {@link TransactionServiceImpl} so the transaction domain
-     * never writes directly to the accounts repository.
-     */
-    @Override
-    public void deductBalance(UUID accountId, BigDecimal amount) {
-    	//Check the amount > 0
-    	if (amount==null || amount.compareTo(BigDecimal.ZERO)<=0) {
-    		throw new BusinessRuleException("Amount Must be greater than Zero");
-		}
-        CreditAccount creditAccount = findAccountById(accountId);
-        validateAccountActive(creditAccount);
-        
-        // Balance validation (defensive)
-        if (creditAccount.getAvailableBalance().compareTo(amount) < 0) {
-            throw new BusinessRuleException("Insufficient available balance");
-        }
-        //Apply Changes
-        creditAccount.setAvailableBalance(creditAccount.getAvailableBalance().subtract(amount));
-        creditAccount.setCurrentBalance(creditAccount.getCurrentBalance().add(amount));
-        accountRepository.save(creditAccount);
-    }
-	/**
-	  * {@inheritDoc}
-     *
-     * <p>Called by {@link TransactionServiceImpl} so the transaction domain
-     * never writes directly to the accounts repository.
-	 */
-    @Override
-	 public void addBalance(UUID accountId, BigDecimal amount) {
-		if (amount==null || amount.compareTo(BigDecimal.ZERO)<=0) {
-			throw new BusinessRuleException("Amount Must be greater than Zero");
-		}
-		CreditAccount creditAccount = findAccountById(accountId);
-		
-		validateAccountActive(creditAccount);
-		//Idempotency check
-		if (creditAccount.getLastPaymentAmount() != null &&
-				creditAccount.getLastPaymentDate() != null &&
-						creditAccount.getLastPaymentDate().isAfter(Instant.now().minusSeconds(10))) {
-		        throw new ConflictException("Duplicate payment detected");
-		    }
-
-
-		// cannot exceed credit limit
-		BigDecimal newAvailable = creditAccount.getAvailableBalance().add(amount);
-		
-		if (newAvailable.compareTo(creditAccount.getCreditLimit())>0) {
-			newAvailable=creditAccount.getCreditLimit();	
-		}
-		
-		BigDecimal newCurrentBalance = creditAccount.getCurrentBalance().subtract(amount);
-		
-		//Prevent negative outstanding (overpayment case)
-	    if (newCurrentBalance.compareTo(BigDecimal.ZERO) < 0) {
-	        newCurrentBalance = BigDecimal.ZERO;
-	    }
-	    
-	    creditAccount.setAvailableBalance(newAvailable);
-	    creditAccount.setCurrentBalance(newCurrentBalance);
-	    creditAccount.setLastPaymentAmount(amount);
-	    creditAccount.setLastPaymentDate(Instant.now());
-
-	    accountRepository.save(creditAccount);
-
-	 }
+//    /**
+//     * {@inheritDoc}
+//     *
+//     * <p>Called by {@link TransactionServiceImpl} so the transaction domain
+//     * never writes directly to the accounts repository.
+//     */
+//    @Override
+//    public void deductBalance(UUID accountId, BigDecimal amount) {
+//    	//Check the amount > 0
+//    	if (amount==null || amount.compareTo(BigDecimal.ZERO)<=0) {
+//    		throw new BusinessRuleException("Amount Must be greater than Zero");
+//		}
+//        CreditAccount creditAccount = findAccountById(accountId);
+//        validateAccountActive(creditAccount);
+//        
+//        // Balance validation (defensive)
+//        if (creditAccount.getAvailableBalance().compareTo(amount) < 0) {
+//            throw new BusinessRuleException("Insufficient available balance");
+//        }
+//        //Apply Changes
+//        creditAccount.setAvailableBalance(creditAccount.getAvailableBalance().subtract(amount));
+//        creditAccount.setCurrentBalance(creditAccount.getCurrentBalance().add(amount));
+//        accountRepository.save(creditAccount);
+//    }
+//	/**
+//	  * {@inheritDoc}
+//     *
+//     * <p>Called by {@link TransactionServiceImpl} so the transaction domain
+//     * never writes directly to the accounts repository.
+//	 */
+//    @Override
+//	 public void addBalance(UUID accountId, BigDecimal amount) {
+//		if (amount==null || amount.compareTo(BigDecimal.ZERO)<=0) {
+//			throw new BusinessRuleException("Amount Must be greater than Zero");
+//		}
+//		CreditAccount creditAccount = findAccountById(accountId);
+//		
+//		validateAccountActive(creditAccount);
+//		//Idempotency check
+//		if (creditAccount.getLastPaymentAmount() != null &&
+//				creditAccount.getLastPaymentDate() != null &&
+//						creditAccount.getLastPaymentDate().isAfter(Instant.now().minusSeconds(10))) {
+//		        throw new ConflictException("Duplicate payment detected");
+//		    }
+//
+//
+//		// cannot exceed credit limit
+//		BigDecimal newAvailable = creditAccount.getAvailableBalance().add(amount);
+//		
+//		if (newAvailable.compareTo(creditAccount.getCreditLimit())>0) {
+//			newAvailable=creditAccount.getCreditLimit();	
+//		}
+//		
+//		BigDecimal newCurrentBalance = creditAccount.getCurrentBalance().subtract(amount);
+//		
+//		//Prevent negative outstanding (overpayment case)
+//	    if (newCurrentBalance.compareTo(BigDecimal.ZERO) < 0) {
+//	        newCurrentBalance = BigDecimal.ZERO;
+//	    }
+//	    
+//	    creditAccount.setAvailableBalance(newAvailable);
+//	    creditAccount.setCurrentBalance(newCurrentBalance);
+//	    creditAccount.setLastPaymentAmount(amount);
+//	    creditAccount.setLastPaymentDate(Instant.now());
+//
+//	    accountRepository.save(creditAccount);
+//
+//	 }
     @Override
     @Transactional
     public void applyPayment(UUID accountId, BigDecimal amount,Instant paidAt) {
@@ -413,14 +413,14 @@ public class CreditAccountServiceImpl implements CreditAccountService {
 	 * Validate account is active or not and Prevent operation on closed account
 	 * @param account
 	 */
-	private void validateAccountActive(CreditAccount account) {
-	    if (account.getAccountStatus() == AccountStatus.CLOSED) {
-	        throw new BusinessRuleException("Operation not allowed on CLOSED account");
-	    }
-	    if (account.getAccountStatus() != AccountStatus.ACTIVE) {
-	        throw new BusinessRuleException("Account is not active");
-	    }
-	}
+//	private void validateAccountActive(CreditAccount account) {
+//	    if (account.getAccountStatus() == AccountStatus.CLOSED) {
+//	        throw new BusinessRuleException("Operation not allowed on CLOSED account");
+//	    }
+//	    if (account.getAccountStatus() != AccountStatus.ACTIVE) {
+//	        throw new BusinessRuleException("Account is not active");
+//	    }
+//	}
 	
 	/**
 	 * * Valid status transitions:

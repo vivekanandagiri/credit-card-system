@@ -44,10 +44,9 @@ public class Transaction extends BaseEntity {
     @JoinColumn(name = "payment_id")
     private Payment payment;
     
-    //Bill 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "statement_id")
-    private BillingStatement statement;
+    // 🆕 AUTHORIZATION LINK (IMPORTANT)
+    @Column(name = "authorization_id")
+    private UUID authorizationId;
 
     // ── Transaction details ──
     @Enumerated(EnumType.STRING)
@@ -87,24 +86,19 @@ public class Transaction extends BaseEntity {
     @Column(name = "merchant_category_name", length = 100)
     private String merchantCategoryName;
 
-   
-    // Captures account.availableBalance before and after this transaction
-    @Column(name = "balance_before", nullable = false, precision = 19, scale = 4)
-    private BigDecimal balanceBefore;
-
-    @Column(name = "balance_after", nullable = false, precision = 19, scale = 4)
-    private BigDecimal balanceAfter;
 
     // ── Decline info ──
     @Column(name = "decline_reason", length = 500)
     private String declineReason;
 
-    // ── Transaction Reference Number ──
-    @Column(name = "reference_number", nullable = false, unique = true, length = 50)
-    private String referenceNumber;
-    //Transaction Reference for purchase 
-    @Column(name = "transaction_reference", unique = true)
-    private String transactionReference;
+ // Internal system reference
+    @Column(name = "internal_reference", nullable = false, unique = true)
+    private String internalReference;
+
+    // External / idempotency reference
+    @Column(name = "network_reference", unique = true)
+    private String networkReference;
+
 
     // ── Time stamp ──
     @Column(name = "transaction_time", nullable = false)

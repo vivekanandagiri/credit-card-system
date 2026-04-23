@@ -18,19 +18,32 @@ import com.example.exception.ResourceNotFoundException;
 import com.example.mapper.CardProductMapper;
 import com.example.repository.CreditCardProductRepository;
 import com.example.service.CardProductService;
-import com.example.service.CreditProductService;
+import lombok.RequiredArgsConstructor;
 
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Implementation of {@link CardProductService} managing credit card product lifecycle.
- * CreditCardProduct is fully independent of CreditProduct.
- * No credit product lookup during creation or updates.
- * Admin manages card products as a standalone catalog.
+ * Implementation of {@link CardProductService} responsible for managing
+ * the lifecycle of credit card products.
+ *
+ * <p><b>Key Characteristics:</b></p>
+ * <ul>
+ *     <li>Card products are managed as an independent catalog</li>
+ *     <li>No dependency on credit product during creation/update</li>
+ *     <li>Supports creation, retrieval, update, and activation validation</li>
+ * </ul>
+ *
+ * <p><b>Business Rules:</b></p>
+ * <ul>
+ *     <li>Statement cycle day must be between 1 and 28</li>
+ *     <li>Financial limits must be non-negative</li>
+ *     <li>Feature flags must align with limits (e.g., ATM disabled → no ATM limit)</li>
+ *     <li>Inactive products cannot be modified unless reactivated</li>
+ * </ul>
  */
-
 @Service
 @Transactional
+@RequiredArgsConstructor
 public class CardProductServiceImpl implements CardProductService {
 	
     private static final int STATEMENT_CYCLE_DAY_MIN = 1;
@@ -39,21 +52,21 @@ public class CardProductServiceImpl implements CardProductService {
     private final CreditCardProductRepository cardProductRepository;          
     private final CardProductMapper cardProductMapper;
  
-    public CardProductServiceImpl(
-            CreditCardProductRepository cardProductRepository,
-            CreditProductService creditProductService,
-            CardProductMapper cardProductMapper) {
-        this.cardProductRepository = cardProductRepository;
-        this.cardProductMapper = cardProductMapper;
-    }
-
+    
     /**
-     * Creates a new card product under an existing active credit product.
+     * Creates a new credit card product.
+     *
+     * <p>Validations performed:</p>
+     * <ul>
+     *     <li>Statement cycle day range</li>
+     *     <li>Feature compatibility (ATM/online flags vs limits)</li>
+     *     <li>Financial constraints (non-negative values, forex limits)</li>
+     * </ul>
      *
      * @param request creation payload
-     * @return API response containing the created card product details
+     * @return {@link CardProductCreateResponse} with created product details
+     * @throws BadRequestException if validation fails
      */
-    
     @Override
     public CardProductCreateResponse create(CardProductCreateRequest request) {
 
@@ -76,7 +89,11 @@ public class CardProductServiceImpl implements CardProductService {
     }
 
     /**
-     * Retrieves a single card product by its ID.
+     * Retrieves a card product by its unique identifier.
+     *
+     * @param id product ID
+     * @return {@link CardProductResponse}
+     * @throws ResourceNotFoundException if product not found
      */
     @Override
     public CardProductResponse getById(UUID id) {
@@ -88,9 +105,10 @@ public class CardProductServiceImpl implements CardProductService {
     }
 
     /**
-     * Retrieves all card products, optionally filtered by status.
+     * Retrieves all card products optionally filtered by status.
      *
-     * @param status optional filter; returns all products when null
+     * @param status product status filter (nullable)
+     * @return list of {@link CardProductResponse}
      */
     @Override
     public List<CardProductResponse> getAll(ProductStatus status) {
@@ -114,6 +132,8 @@ public class CardProductServiceImpl implements CardProductService {
 
     /**
      * Retrieves all active card products.
+     *
+     * @return list of active products
      */
     @Override
     @Transactional(readOnly = true)
@@ -129,7 +149,20 @@ public class CardProductServiceImpl implements CardProductService {
     }
 
     /**
-     * Updates an active card product. At least one field must be provided.
+     * Updates an existing card product.
+     *
+     * <p>Rules:</p>
+     * <ul>
+     *     <li>At least one field must be provided</li>
+     *     <li>Inactive products cannot be modified unless status is changed</li>
+     *     <li>Status change must not be redundant</li>
+     * </ul>
+     *
+     * @param id      product ID
+     * @param request update payload
+     * @return updated {@link CardProductResponse}
+     * @throws BadRequestException if validation fails
+     * @throws ResourceNotFoundException if product not found
      */
     @Override
     public CardProductResponse update(UUID id, CardProductUpdateRequest request) {
@@ -160,21 +193,23 @@ public class CardProductServiceImpl implements CardProductService {
                 request.getOnlineTransactionsAllowed(),
                 request.getEcommerceDailyLimit()
         );
-
         //Apply updates (partial or full)
         cardProductMapper.updateEntity(request, card);
 
         CardProductResponse response =
                 cardProductMapper.toResponse(cardProductRepository.save(card));
-
         return response;
     }
 
     /**
      * {@inheritDoc}
+     * Retrieves an active card product entity.
      *
-     * <p>Used by {@link CreditCardServiceImpl} to resolve the card product entity
-     * without injecting the card product repository.
+     * <p>Used internally by other services (e.g., card issuance).</p>
+     *
+     * @param cardProductId product ID
+     * @return active {@link CreditCardProduct}
+     * @throws BadRequestException if product is not active
      */
     @Override
     @Transactional(readOnly = true)
@@ -190,9 +225,11 @@ public class CardProductServiceImpl implements CardProductService {
     //------------------Private Helpers ----------------
 
     /**
-     * Extract Credit Card Product By id
-     * @param id
-     * @return
+     * Retrieves card product entity by ID.
+     *
+     * @param id product ID
+     * @return {@link CreditCardProduct}
+     * @throws ResourceNotFoundException if not found
      */
     private CreditCardProduct findById(UUID id) {
 
@@ -202,7 +239,7 @@ public class CardProductServiceImpl implements CardProductService {
                                 "Credit Card product with id " + id + " not found"));
     }
     /**
-     * Statement Cycle validation
+     * Validates statement cycle day range (1–28).
      * @param cycleDay
      */
     private void validateStatementCycleDay(Integer cycleDay) {
@@ -210,7 +247,9 @@ public class CardProductServiceImpl implements CardProductService {
             throw new BadRequestException("Statement cycle day must be between 1 and 28");
         }
     }
-
+    /**
+     * Validates financial constraints for card product.
+     */
     private void validateFinancialLimits(CardProductCreateRequest request) {
 
         if (request.getAnnualFee() != null
@@ -245,7 +284,9 @@ public class CardProductServiceImpl implements CardProductService {
                     "Forex markup cannot exceed 100%");
         }
     }
-    
+    /**
+     * Validates feature toggles against corresponding limits.
+     */
     private void validateFeatureRules(
             Boolean atmWithdrawalAllowed,
             BigDecimal atmDailyLimit,
@@ -262,7 +303,9 @@ public class CardProductServiceImpl implements CardProductService {
                     "E-commerce limit cannot be set when online transactions are disabled");
         }
     }
-
+    /**
+     * Ensures at least one field is provided for update.
+     */
     private void validateUpdateRequest(CardProductUpdateRequest request) {
 
         if (request.getProductName() == null &&

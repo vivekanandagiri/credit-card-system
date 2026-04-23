@@ -3,7 +3,6 @@ package com.example.api;
 import java.util.List;
 
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import com.example.dto.request.CreditProductCreateRequest;
@@ -38,9 +37,8 @@ import jakarta.validation.Valid;
  *
  * <p>All responses are wrapped in {@link ApiResponse}
  */
-@Tag(name = "Credit Products", description = "APIs for managing credit products")
+@Tag(name = "2. Credit Products", description = "APIs for managing credit products")
 @RequestMapping("/api/v1/credit-products")
-@PreAuthorize("hasRole('ADMIN')")
 public interface CreditProductApi {
 
 	/**

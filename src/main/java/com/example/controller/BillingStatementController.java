@@ -55,75 +55,17 @@ public class BillingStatementController implements BillingStatementApi {
                 )
         );
     }
-
-    // =====================================================
-//
-//    @GetMapping("/{accountId}/statements/{statementId}")
-//    @PreAuthorize("hasAnyRole('CUSTOMER','ADMIN')")
-//    public ResponseEntity<ApiResponse<StatementResponse>> getStatementById(
-//            @AuthenticationPrincipal CustomUserPrincipal principal,
-//            @PathVariable UUID accountId,
-//            @PathVariable UUID statementId) {
-//
-//        StatementResponse response;
-//
-//        if (principal.getRole() == UserRole.ADMIN) {
-//
-//            response = billingStatementService.getStatementById(accountId, statementId);
-//
-//        } else {
-//
-//            response = billingStatementService.getCustomerStatementById(
-//                    principal.getUserId(), accountId, statementId);
-//        }
-//
-//        return ResponseEntity.ok(
-//                ApiResponse.success(
-//                        HttpStatus.OK,
-//                        "Statement fetched successfully",
-//                        response
-//                )
-//        );
+    
+//    @PreAuthorize("hasRole('ADMIN')")
+//    @PostMapping("/test-statement")
+//    public BillingStatementResponse generateTestStatement(
+//            @RequestParam UUID accountId,
+//            @RequestParam String date // format: yyyy-MM-dd
+//    ) {
+//        LocalDate inputDate = LocalDate.parse(date);
+//        return billingStatementService.generateStatementForDate(accountId, inputDate);
 //    }
 
-//    // =====================================================
-//    // ADMIN ONLY
-//    // =====================================================
-//
-//    @GetMapping("/statements")
-//    @PreAuthorize("hasRole('ADMIN')")
-//    public ResponseEntity<ApiResponse<List<StatementResponse>>> getAllStatements() {
-//
-//        List<StatementResponse> responses =
-//                billingStatementService.getAllStatements();
-//
-//        return ResponseEntity.ok(
-//                ApiResponse.success(
-//                        HttpStatus.OK,
-//                        "All statements fetched successfully",
-//                        responses
-//                )
-//        );
-//    }
-//
-//    // =====================================================
-//
-//    @GetMapping(value = "/statements", params = "status")
-//    @PreAuthorize("hasRole('ADMIN')")
-//    public ResponseEntity<ApiResponse<List<StatementResponse>>> getStatementsByStatus(
-//            @RequestParam StatementStatus status) {
-//
-//        List<StatementResponse> responses =
-//                billingStatementService.getStatementsByStatus(status);
-//
-//        return ResponseEntity.ok(
-//                ApiResponse.success(
-//                        HttpStatus.OK,
-//                        "Statements fetched for status: " + status,
-//                        responses
-//                )
-//        );
-//    }
 
     // =====================================================
 

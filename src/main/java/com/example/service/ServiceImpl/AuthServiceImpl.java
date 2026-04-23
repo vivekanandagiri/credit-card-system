@@ -15,6 +15,8 @@ import com.example.security.JwtUtil;
 import com.example.service.AuthService;
 import com.example.service.CustomerService;
 
+import lombok.RequiredArgsConstructor;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -24,11 +26,29 @@ import java.time.Instant;
 import java.time.LocalDate;
 
 /**
- * Core authentication and identity provisioning service.
- * Handles secure user onboarding, credential verification, and JWT issuance.
+ * Implementation of {@link AuthService} responsible for:
+ * <ul>
+ *     <li>User registration (identity + credentials)</li>
+ *     <li>Authentication (credential verification)</li>
+ *     <li>JWT token issuance</li>
+ * </ul>
+ *
+ * <p><b>Security Considerations:</b></p>
+ * <ul>
+ *     <li>Passwords are securely hashed using {@link PasswordEncoder}</li>
+ *     <li>JWT tokens are generated after successful authentication</li>
+ *     <li>Account state (active/locked) is validated before password check</li>
+ * </ul>
+ *
+ * <p><b>Business Rules:</b></p>
+ * <ul>
+ *     <li>Email, mobile number, and PAN must be unique</li>
+ *     <li>User must be at least 18 years old</li>
+ * </ul>
  */
 @Service
 @Transactional
+@RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
     private static final int MINIMUM_AGE_YEARS = 18;
@@ -39,28 +59,29 @@ public class AuthServiceImpl implements AuthService {
     private final JwtUtil jwtUtil;
     private final AuthMapper authMapper;
 
-    // Injecting dependencies using constructor
-    public AuthServiceImpl(UserRepository userRepository,
-                           CustomerService customerService,
-                           PasswordEncoder passwordEncoder,
-                           JwtUtil jwtUtil, AuthMapper authMapper) {
-        this.userRepository = userRepository;
-        this.customerService = customerService;
-        this.passwordEncoder = passwordEncoder;
-        this.jwtUtil = jwtUtil;
-        this.authMapper = authMapper;
-    }
     
-    // Getting jwt expiration time from application.properties
-    @Value("${jwt.expiration}")
+    /**
+     * JWT expiration time in seconds (configured via application properties).
+     */    @Value("${jwt.expiration}")
     private long jwtExpiration;
 
-    /**
-     * Method to register a new user
-     *
-     * @param request the register request
-     * @return RegisterResponse
-     */
+     /**
+      * Registers a new user in the system.
+      *
+      * <p>Steps:</p>
+      * <ol>
+      *     <li>Validate uniqueness (email, mobile, PAN)</li>
+      *     <li>Validate age and date of birth</li>
+      *     <li>Create and persist {@link Customer}</li>
+      *     <li>Create and persist {@link User} with encoded password</li>
+      * </ol>
+      *
+      * @param request registration request payload
+      * @return {@link RegisterResponse} containing created user ID
+      *
+      * @throws ConflictException if email/mobile/PAN already exists
+      * @throws BusinessRuleException if DOB is invalid or age < 18
+      */
     @Override
     public RegisterResponse register(RegisterRequest request) {
 
@@ -89,10 +110,22 @@ public class AuthServiceImpl implements AuthService {
     }
 
     /**
-     * Method to login a user
+     * Authenticates a user and generates a JWT token.
      *
-     * @param request the login request
-     * @return LoginResponse
+     * <p>Steps:</p>
+     * <ol>
+     *     <li>Fetch user by email</li>
+     *     <li>Validate account state (active & not locked)</li>
+     *     <li>Verify password</li>
+     *     <li>Update last login timestamp</li>
+     *     <li>Generate JWT token</li>
+     * </ol>
+     *
+     * @param request login request containing credentials
+     * @return {@link LoginResponse} with JWT token and user info
+     *
+     * @throws InvalidCredentialsException if email not found or password invalid
+     * @throws BusinessRuleException if account is locked or disabled
      */
     @Override
     public LoginResponse login(LoginRequest request) {
@@ -126,7 +159,12 @@ public class AuthServiceImpl implements AuthService {
     
  // ---------------------- VALIDATIONS ---------------------------------
 
-    // Helper method to check unique fields
+    /**
+     * Validates uniqueness of user registration fields.
+     *
+     * @param request registration request
+     * @throws ConflictException if any unique constraint is violated
+     */
     private void validateUniqueFields(RegisterRequest request) {
 
         // Check if email exists
@@ -165,7 +203,12 @@ public class AuthServiceImpl implements AuthService {
         }
     }
 
-    // Helper method to check account state
+    /**
+     * Validates date of birth and minimum age requirement.
+     *
+     * @param dob date of birth
+     * @throws BusinessRuleException if DOB is null, future, or age < 18
+     */
     private void validateAccountState(User user) {
 
         if (!user.isActive()) {

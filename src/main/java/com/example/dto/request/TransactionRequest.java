@@ -39,7 +39,7 @@ public class TransactionRequest {
     @Schema(
         description = "Type of transaction",
         example = "PURCHASE",
-        allowableValues = {"PURCHASE", "REFUND"},
+        allowableValues = {"PURCHASE"},
         requiredMode = Schema.RequiredMode.REQUIRED
     )
     private TransactionType transactionType;

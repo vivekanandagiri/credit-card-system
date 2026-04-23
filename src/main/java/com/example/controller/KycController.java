@@ -14,6 +14,7 @@ import com.example.dto.request.KycStatusUpdateRequest;
 import com.example.dto.response.ApiResponse;
 import com.example.dto.response.KycResponse;
 import com.example.enums.KycStatus;
+import com.example.exception.BadRequestException;
 import com.example.security.CustomUserPrincipal;
 import com.example.service.KycService;
 
@@ -37,6 +38,7 @@ public class KycController implements KycApi {
             String documentNumber,
             MultipartFile file) {
 
+    	validateFile(file);
         // IDOR Protection: Forcing the customerId from the token context
         String result = kycService.uploadKyc(
                 principal.getCustomerId(),
@@ -52,7 +54,29 @@ public class KycController implements KycApi {
                 		result));
     }
 
-    @Override
+    //Helper method to handle big file 
+    private void validateFile(MultipartFile file) {
+    	if (file == null || file.isEmpty()) {
+            throw new BadRequestException("File is required");
+        }
+    	long maxSize = 5 * 1024 * 1024;
+    	if (file.getSize() > maxSize) {
+            throw new BadRequestException("File size must not exceed 5MB");
+        }
+    	
+        String contentType = file.getContentType();
+
+        if (contentType == null ||
+            (!contentType.equals("application/pdf") &&
+             !contentType.equals("image/jpeg") &&
+             !contentType.equals("image/png"))) {
+
+            throw new BadRequestException("Only PDF, JPG, PNG files are allowed");
+        }
+		
+	}
+
+	@Override
     public ResponseEntity<ApiResponse<KycResponse>> getStatus(
             CustomUserPrincipal principal, KycStatus status) {
 

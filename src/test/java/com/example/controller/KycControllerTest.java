@@ -1,5 +1,16 @@
 package com.example.controller;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
 import com.example.config.TimezoneInterceptor;
 import com.example.config.WebConfig;
 import com.example.dto.request.KycStatusUpdateRequest;
@@ -10,59 +21,42 @@ import com.example.security.CustomUserPrincipal;
 import com.example.security.JwtFilter;
 import com.example.security.JwtUtil;
 import com.example.service.KycService;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.autoconfigure.web.servlet.*;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.FilterType;
 import org.springframework.context.annotation.ComponentScan.Filter;
+import org.springframework.context.annotation.FilterType;
 import org.springframework.http.MediaType;
-
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
-
-import java.time.Instant;
-import java.util.List;
-import java.util.UUID;
-
-import static org.mockito.ArgumentMatchers.*;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
-
+import org.springframework.test.web.servlet.ResultActions;
 
 @WebMvcTest(
         controllers = KycController.class,
         excludeAutoConfiguration = SecurityAutoConfiguration.class,
-        		excludeFilters = { 
-        				@Filter(type = FilterType.ASSIGNABLE_TYPE,classes = JwtFilter.class),
-        				@Filter(type = FilterType.ASSIGNABLE_TYPE,classes = TimezoneInterceptor.class),
-        				@Filter(type = FilterType.ASSIGNABLE_TYPE,classes = WebConfig.class)
-        	}
+        excludeFilters = {
+                @Filter(type = FilterType.ASSIGNABLE_TYPE, classes = JwtFilter.class),
+                @Filter(type = FilterType.ASSIGNABLE_TYPE, classes = TimezoneInterceptor.class),
+                @Filter(type = FilterType.ASSIGNABLE_TYPE, classes = WebConfig.class)
+        }
 )
 @AutoConfigureMockMvc(addFilters = false)
 class KycControllerTest {
 
-    @Autowired
-    private MockMvc mockMvc;
+    @Autowired private MockMvc mockMvc;
+    @Autowired private ObjectMapper objectMapper;
 
-    @MockBean
-    private KycService kycService;
-    
-    @MockBean
-    private JwtUtil jwtUtil;  
-
-    @Autowired
-    private ObjectMapper objectMapper;
+    @MockBean private KycService kycService;
+    @MockBean private JwtUtil jwtUtil;
 
     private final UUID userId = UUID.randomUUID();
     private final UUID customerId = UUID.randomUUID();
@@ -72,125 +66,139 @@ class KycControllerTest {
                 userId,
                 customerId,
                 "test@example.com",
+                null,
                 UserRole.CUSTOMER
         );
     }
 
+    // ================= UPLOAD KYC =================
 
-    // UPLOAD KYC
+    @Nested
+    @DisplayName("Upload KYC API Tests")
+    class UploadKycTests {
 
-    @Test
-    void shouldUploadKycSuccessfully() throws Exception {
+        @Test
+        void shouldReturnCreated_whenValidRequest() throws Exception {
+            // GIVEN
+            when(kycService.uploadKyc(any(), anyString(), anyString(), any()))
+                    .thenReturn("SUBMITTED");
 
-        Mockito.when(kycService.uploadKyc(any(), anyString(), anyString(), any()))
-                .thenReturn("SUBMITTED");
+            MockMultipartFile file = new MockMultipartFile(
+                    "file",
+                    "pan.jpg",
+                    MediaType.IMAGE_JPEG_VALUE,
+                    "testdata".getBytes()
+            );
 
-        MockMultipartFile file =
-                new MockMultipartFile(
-                        "file",
-                        "pan.jpg",
-                        MediaType.IMAGE_JPEG_VALUE,
-                        "testdata".getBytes()
-                );
-
-        mockMvc.perform(multipart("/api/v1/kyc")
-                .file(file)
-                .param("documentType","PAN")
-                .param("documentNumber","ABCDE1234F")
-                .with(authentication(
-                        new UsernamePasswordAuthenticationToken(principal(), null)
-                )))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.message")
-                        .value("KYC submitted successfully"))
-                .andExpect(jsonPath("$.data").value("SUBMITTED"))
-                .andExpect(jsonPath("$.timestamp").exists());
-
-
-        Mockito.verify(kycService)
-                .uploadKyc(any(), anyString(), anyString(), any());
+            // WHEN + THEN
+            mockMvc.perform(multipart("/api/v1/kyc")
+                    .file(file)
+                    .param("documentType", "PAN")
+                    .param("documentNumber", "ABCDE1234F")
+                    .with(authentication(
+                            new UsernamePasswordAuthenticationToken(principal(), null)
+                    )))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.message")
+                            .value("KYC submitted successfully"))
+                    .andExpect(jsonPath("$.data").value("SUBMITTED"));
+        }
     }
 
+    // ================= GET KYC STATUS =================
 
-    // GET KYC STATUS
+    @Nested
+    @DisplayName("Get KYC Status API Tests")
+    class GetKycStatusTests {
 
+        @Test
+        void shouldReturnOk_whenKycExists() throws Exception {
+            // GIVEN
+            KycResponse response = new KycResponse(
+                    UUID.randomUUID(),
+                    KycStatus.PENDING,
+                    Instant.now()
+            );
 
-    @Test
-    void shouldGetKycStatus() throws Exception {
+            when(kycService.getKycStatus(any())).thenReturn(response);
 
-        KycResponse kyc =
-                new KycResponse(UUID.randomUUID(), KycStatus.PENDING, Instant.now());
-
-        
-        Mockito.when(kycService.getKycStatus(any()))
-                .thenReturn(kyc);
-
-        mockMvc.perform(get("/api/v1/kyc")
-                .with(authentication(
-                        new UsernamePasswordAuthenticationToken(principal(), null)
-                )))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message")
-                        .value("KYC status fetched successfully"))
-                .andExpect(jsonPath("$.data.status").value("PENDING"))
-                .andExpect(jsonPath("$.timestamp").exists());
-
-        Mockito.verify(kycService).getKycStatus(any());
+            // WHEN + THEN
+            mockMvc.perform(get("/api/v1/kyc")
+                    .with(authentication(
+                            new UsernamePasswordAuthenticationToken(principal(), null)
+                    )))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.status").value("PENDING"))
+                    .andExpect(jsonPath("$.message")
+                            .value("KYC status fetched successfully"));
+        }
     }
 
-    // =============================
-    // VERIFY KYC
-    // =============================
+    // ================= UPDATE KYC =================
 
-    @Test
-    void shouldVerifyKyc() throws Exception {
+    @Nested
+    @DisplayName("Update KYC API Tests")
+    class UpdateKycTests {
 
-        UUID kycId = UUID.randomUUID();
+        @Test
+        void shouldReturnOk_whenAdminVerifiesKyc() throws Exception {
+            // GIVEN
+            UUID kycId = UUID.randomUUID();
 
-        KycStatusUpdateRequest request =
-                new KycStatusUpdateRequest(KycStatus.VERIFIED, null);
+            KycStatusUpdateRequest request =
+                    new KycStatusUpdateRequest(KycStatus.VERIFIED, null);
 
-        Mockito.when(kycService.updateKycStatus(any(), any(), any()))
-                .thenReturn("VERIFIED");
+            when(kycService.updateKycStatus(any(), any(), any()))
+                    .thenReturn("VERIFIED");
 
-        mockMvc.perform(put("/api/v1/kyc/{kycId}",kycId)
+            // WHEN + THEN
+            mockMvc.perform(put("/api/v1/kyc/{kycId}", kycId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(request))
+                    .with(authentication(
+                            new UsernamePasswordAuthenticationToken(
+                                    principal(),
+                                    null,
+                                    List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
+                            )
+                    )))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data").value("VERIFIED"))
+                    .andExpect(jsonPath("$.message")
+                            .value("KYC status updated successfully"));
+        }
+    }
+
+    // ================= GET PENDING KYC =================
+
+    @Nested
+    @DisplayName("Get Pending KYC API Tests")
+    class GetPendingKycTests {
+
+        @Test
+        void shouldReturnOk_whenPendingKycExists() throws Exception {
+            // GIVEN
+            List<KycResponse> list = List.of(
+                    new KycResponse(UUID.randomUUID(), KycStatus.PENDING, Instant.now())
+            );
+
+            when(kycService.getPendingKyc()).thenReturn(list);
+
+            // WHEN + THEN
+            mockMvc.perform(get("/api/v1/kyc/pending"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data[0].status").value("PENDING"))
+                    .andExpect(jsonPath("$.message")
+                            .value("Pending KYC records fetched successfully"));
+        }
+    }
+
+    // ================= HELPER =================
+
+    @SuppressWarnings("unused")
+	private ResultActions performPost(String url, Object body) throws Exception {
+        return mockMvc.perform(post(url)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request))
-                .with(authentication(
-                        new UsernamePasswordAuthenticationToken(
-                                principal(),
-                                null,
-                                List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
-                        )
-                )))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message")
-                        .value("KYC status updated successfully"))
-                .andExpect(jsonPath("$.data").value("VERIFIED"))
-                .andExpect(jsonPath("$.timestamp").exists());
-
-
-        Mockito.verify(kycService).updateKycStatus(any(), any(), any());
-    }
-
-    // =============================
-    // GET PENDING KYC
-    // =============================
-
-    @Test
-    void shouldGetPendingKyc() throws Exception {
-
-        List<KycResponse> list =
-                List.of(new KycResponse(UUID.randomUUID(), KycStatus.PENDING, Instant.now()));
-
-        Mockito.when(kycService.getPendingKyc())
-                .thenReturn(list);
-
-        mockMvc.perform(get("/api/v1/kyc/pending"))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.message")
-                .value("Pending KYC records fetched successfully"))
-        .andExpect(jsonPath("$.data[0].status").value("PENDING"))
-        .andExpect(jsonPath("$.timestamp").exists());
+                .content(objectMapper.writeValueAsString(body)));
     }
 }

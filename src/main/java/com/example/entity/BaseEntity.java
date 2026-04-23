@@ -2,10 +2,21 @@ package com.example.entity;
 
 import java.time.Instant;
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.experimental.SuperBuilder;
+
 import org.springframework.data.annotation.*;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
 @MappedSuperclass
+@SuperBuilder
 @EntityListeners(AuditingEntityListener.class)
 public abstract class BaseEntity {
 

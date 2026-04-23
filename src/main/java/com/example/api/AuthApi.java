@@ -35,7 +35,7 @@ import jakarta.validation.Valid;
  *
  * <p>All responses are wrapped in {@link ApiResponse}
  */
-@Tag(name = "Authentication", description = "APIs for user registration and authentication")
+@Tag(name = "1. Authentication", description = "APIs for user registration and authentication")
 public interface AuthApi {
 
     /**

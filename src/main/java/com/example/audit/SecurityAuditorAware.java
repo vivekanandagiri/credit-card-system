@@ -58,7 +58,7 @@ public class SecurityAuditorAware implements AuditorAware<String> {
 
         // Case 2: Custom authenticated user
         if (principal instanceof CustomUserPrincipal user) {
-            return Optional.of(user.getEmail());
+            return Optional.of(user.getEmail());//here i used email 
             // Alternative:
             // return Optional.of(user.getUserId().toString());
         }

@@ -6,28 +6,53 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
+import com.example.entity.LedgerEntry;
+import com.example.enums.EntryType;
+import com.example.repository.LedgerEntryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import com.example.entity.BillingStatement;
 import com.example.entity.CreditAccount;
-import com.example.entity.Transaction;
-import com.example.enums.TransactionType;
-import com.example.repository.TransactionRepository;
 import com.example.service.InterestCalculationService;
 
 /**
- * Core financial engine for calculating revolving credit interest.
- * CURRENT MATH MODEL: Simple Interest on Previous Balance + New Purchases.
+ * Implementation of {@link InterestCalculationService} responsible for computing
+ * interest on revolving credit accounts.
+ *
+ * <p><b>Current Interest Model:</b></p>
+ * <ul>
+ *     <li>Simple daily interest (no compounding)</li>
+ *     <li>Interest accrues on outstanding balance per day</li>
+ *     <li>Ledger events (debits/credits) dynamically adjust balance</li>
+ * </ul>
+ *
+ * <p><b>Key Concepts:</b></p>
+ * <ul>
+ *     <li>APR is converted to Daily Periodic Rate (DPR)</li>
+ *     <li>Interest-free grace period applies if previous dues are fully paid</li>
+ *     <li>Interest is calculated across time segments between transactions</li>
+ * </ul>
  */
 @Service
 @RequiredArgsConstructor
 public class InterestCalculationServiceImpl implements InterestCalculationService {
-    private final TransactionRepository transactionRepository;
+    private final LedgerEntryRepository ledgerEntryRepository;
+    /**
+     * Calculates interest for a billing cycle.
+     *
+     * @param accountId       unique identifier of the credit account
+     * @param start           start timestamp of billing cycle
+     * @param end             end timestamp of billing cycle
+     * @param account         credit account containing APR and metadata
+     * @param lastStatement   previous billing statement (used for grace period and carry-over balance)
+     * @param zone            timezone for date calculations
+     * @return calculated interest amount rounded to 2 decimal places
+     */
     @Override
     public BigDecimal calculateInterest(
             UUID accountId,
@@ -40,34 +65,91 @@ public class InterestCalculationServiceImpl implements InterestCalculationServic
 
         BigDecimal dailyRate = calculateDailyRate(account.getApr());
 
-        // 1. GRACE PERIOD 
-        // If the customer paid their last statement in full, they are in their "Grace Period" 
-        // and accrue absolutely zero interest on new purchases.
+        // 1. Grace Period Check
         if (isInterestFree(lastStatement)) {
             return BigDecimal.ZERO;
         }
 
-        BigDecimal totalInterest = BigDecimal.ZERO;
+        // 2. Opening Balance (unpaid previous balance)
+        BigDecimal balance = BigDecimal.ZERO;
 
-        // 2. Interest on unpaid previous balance
-        totalInterest = totalInterest.add(
-                calculatePreviousBalanceInterest(start, end, lastStatement, dailyRate, zone)
-        );
+        if (lastStatement != null) {
+            balance = lastStatement.getClosingBalance()
+                    .subtract(lastStatement.getAmountPaid())
+                    .max(BigDecimal.ZERO);
+        }
 
-        // 3. Interest on new transactions
-        totalInterest = totalInterest.add(
-                calculateTransactionInterest(accountId, start, end, lastStatement, dailyRate, zone)
-        );
 
-        return totalInterest.setScale(2, RoundingMode.HALF_UP);
-        //return BigDecimal.ZERO;
+
+        // 3. Fetch ledger entries within billing cycle
+        List<LedgerEntry> entries =
+                ledgerEntryRepository.findByAccountIdAndCreatedAtBetween(accountId, start, end);
+
+        // If no transactions, apply simple interest on opening balance
+        if (entries == null || entries.isEmpty()) {
+            return calculateSimpleInterest(balance, dailyRate, start, end, zone);
+        }
+
+        // 4. Sort transactions chronologically
+        entries.sort(Comparator.comparing(LedgerEntry::getCreatedAt));
+
+        BigDecimal interest = BigDecimal.ZERO;
+        Instant lastTime = start;
+
+        // 5. Process each ledger event
+        for (LedgerEntry entry : entries) {
+
+            Instant entryTime = entry.getCreatedAt();
+
+            if (entryTime.isBefore(start)) continue;
+
+            long days = getDaysBetween(lastTime, entryTime, zone);
+
+            // Accumulate interest for the period before this transaction
+            if (days > 0 && balance.compareTo(BigDecimal.ZERO) > 0) {
+                interest = interest.add(
+                        balance
+                                .multiply(dailyRate)
+                                .multiply(BigDecimal.valueOf(days))
+                );
+            }
+
+            // Apply transaction effect
+            if (entry.getEntryType() == EntryType.DEBIT) {
+                balance = balance.add(entry.getAmount());
+            } else {
+                balance = balance.subtract(entry.getAmount());
+            }
+
+            lastTime = entryTime;
+        }
+
+        // 6. Final segment till the end of cycle
+        long days = getDaysBetween(lastTime, end, zone);
+
+        if (days > 0 && balance.compareTo(BigDecimal.ZERO) > 0) {
+            interest = interest.add(
+                    balance
+                            .multiply(dailyRate)
+                            .multiply(BigDecimal.valueOf(days))
+            );
+        }
+
+        return interest.setScale(2, RoundingMode.HALF_UP);
     }
 
     // ================= HELPER METHODS =================
 
     /**
-     * Converts Annual Percentage Rate (APR) to the Daily Periodic Rate (DPR).
-     * Formula: DPR = (APR / 100) / 365
+     * Converts Annual Percentage Rate (APR) into Daily Periodic Rate (DPR).
+     *
+     * <p>Formula:</p>
+     * <pre>
+     * DPR = (APR / 100) / 365
+     * </pre>
+     *
+     * @param apr annual percentage rate (e.g., 36 for 36%)
+     * @return daily interest rate with high precision
      */
     private BigDecimal calculateDailyRate(BigDecimal apr) {
         return apr
@@ -76,7 +158,16 @@ public class InterestCalculationServiceImpl implements InterestCalculationServic
     }
 
     /**
-     * Determines if the account has maintained its interest-free grace period.
+     * Determines whether the account qualifies for an interest-free grace period.
+     *
+     * <p>Grace period applies when:</p>
+     * <ul>
+     *     <li>No previous statement exists (new account)</li>
+     *     <li>Previous statement was fully paid</li>
+     * </ul>
+     *
+     * @param statement previous billing statement
+     * @return true if interest should NOT be charged
      */
     private boolean isInterestFree(BillingStatement statement) {
         // If there is no previous statement, it's their first month! They get a grace period.
@@ -86,91 +177,60 @@ public class InterestCalculationServiceImpl implements InterestCalculationServic
         return statement.getAmountPaid().compareTo(statement.getTotalAmountDue()) >= 0;
     }
 
-    /**
-     * Calculates interest accrued on the revolving balance carried over from the previous month.
-     */
-    private BigDecimal calculatePreviousBalanceInterest(
-            Instant start,
-            Instant end,
-            BillingStatement statement,
-            BigDecimal dailyRate,
-            ZoneId zone) {
-    	
-        if (statement == null) return BigDecimal.ZERO;
-
-        BigDecimal unpaid = statement.getClosingBalance()
-                .subtract(statement.getAmountPaid())
-                .max(BigDecimal.ZERO);
-
-        long days = getDaysBetween(start, end, zone);
-
-        return unpaid.multiply(dailyRate).multiply(BigDecimal.valueOf(days));
-    }
 
     /**
-     * Calculates interest on new purchases made during the current cycle.
-     * Interest begins accruing on the exact day the transaction is posted.
+     * Determines whether the account qualifies for an interest-free grace period.
+     *
+     * <p>Grace period applies when:</p>
+     * <ul>
+     *     <li>No previous statement exists (new account)</li>
+     *     <li>Previous statement was fully paid</li>
+     * </ul>
+     *
+     * @param statement previous billing statement
+     * @return true if interest should NOT be charged
      */
-    private BigDecimal calculateTransactionInterest(
-            UUID accountId,
+    private BigDecimal calculateSimpleInterest(
+            BigDecimal balance,
+            BigDecimal dailyRate,
             Instant start,
             Instant end,
-            BillingStatement lastStatement,
-            BigDecimal dailyRate,
             ZoneId zone
     ) {
+        long days = getDaysBetween(start, end, zone);
 
-        Instant cutoff = getLastStatementEnd(lastStatement, start, zone);
-
-        List<Transaction> transactions = Optional.ofNullable(
-                transactionRepository.findTransactionsForInterest(
-                        accountId, start, end, TransactionType.PURCHASE
-                )
-        ).orElse(List.of());
-
-        LocalDate endDate = toLocalDate(end, zone);
-
-        BigDecimal interest = BigDecimal.ZERO;
-
-        for (Transaction txn : transactions) {
-
-            if (txn.getTransactionTime().isBefore(cutoff)) {
-                continue;// Already accounted for in previous balance
-            }
-
-            LocalDate txnDate = toLocalDate(txn.getTransactionTime(), zone);
-            long days = ChronoUnit.DAYS.between(txnDate, endDate);
-
-            if (days <= 0) continue;
-            // Calculates the interest from the day of purchase to the end of the billing cycle
-            interest = interest.add(
-                    txn.getAmount()
-                            .multiply(dailyRate)
-                            .multiply(BigDecimal.valueOf(days))
-            );
+        if (days <= 0 || balance.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO;
         }
 
-        return interest;
+        return balance
+                .multiply(dailyRate)
+                .multiply(BigDecimal.valueOf(days));
     }
 
     // ================= UTIL METHODS =================
 
-    private Instant getLastStatementEnd(
-            BillingStatement statement,
-            Instant start,
-            ZoneId zone
-    ) {
-        return (statement != null)
-                ? statement.getBillingPeriodEnd().atStartOfDay(zone).toInstant()
-                : start;
-    }
-
+    /**
+     * Calculates number of full days between two instants using a timezone.
+     *
+     * @param start start timestamp
+     * @param end   end timestamp
+     * @param zone  timezone
+     * @return number of days between dates
+     */
     private long getDaysBetween(Instant start, Instant end, ZoneId zone) {
         LocalDate startDate = toLocalDate(start, zone);
         LocalDate endDate = toLocalDate(end, zone);
         return ChronoUnit.DAYS.between(startDate, endDate);
     }
 
+    /**
+     * Converts an {@link Instant} to {@link LocalDate} using given timezone.
+     *
+     * @param instant timestamp
+     * @param zone    timezone
+     * @return local date representation
+     */
     private LocalDate toLocalDate(Instant instant, ZoneId zone) {
         return instant.atZone(zone).toLocalDate();
     }

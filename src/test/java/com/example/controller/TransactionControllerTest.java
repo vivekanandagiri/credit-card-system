@@ -60,7 +60,7 @@ class TransactionControllerTest {
                 UUID.randomUUID(),
                 null,
                 "user@test.com",
-                com.example.enums.UserRole.CUSTOMER
+                null, com.example.enums.UserRole.CUSTOMER
         );
     }
 

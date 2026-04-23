@@ -336,7 +336,12 @@ public class CreditAccountApplicationServiceImpl implements CreditAccountApplica
     }
  
     /**
-     * Fetches application by ID or throws exception if not found.
+     * Validates that the customer does not already have an active application
+     * for the same credit product.
+     *
+     * @param customer      the customer applying
+     * @param creditProduct the credit product being applied for
+     * @throws ConflictException if an active application already exists
      */
     private void validateNoDuplicateActiveApplication(Customer customer, CreditProduct creditProduct) {
         boolean exists = applicationRepository
@@ -346,7 +351,13 @@ public class CreditAccountApplicationServiceImpl implements CreditAccountApplica
             throw new ConflictException("You already have an active application for this credit product");
         }
     }
- 
+    
+    /**
+     * Ensures the customer has not exceeded the maximum allowed active applications.
+     *
+     * @param customer the customer
+     * @throws BusinessRuleException if the limit is exceeded
+     */
     private void validateActiveApplicationLimit(Customer customer) {
         int count = applicationRepository.countByCustomerCustomerIdAndApplicationStatusIn(
                 customer.getCustomerId(), ACTIVE_APPLICATION_STATUSES);
@@ -357,6 +368,14 @@ public class CreditAccountApplicationServiceImpl implements CreditAccountApplica
         }
     }
  
+    /**
+     * Prevents re-application for the same credit product within the cool down period
+     * after a rejection.
+     *
+     * @param customer      the customer
+     * @param creditProduct the credit product
+     * @throws BusinessRuleException if within cool down period
+     */
     private void validateRejectionCooldown(Customer customer, CreditProduct creditProduct) {
         Instant cooldownStart = Instant.now().minus(REJECTION_COOLDOWN_DAYS, ChronoUnit.DAYS);
         boolean recentlyRejected = applicationRepository
@@ -370,6 +389,14 @@ public class CreditAccountApplicationServiceImpl implements CreditAccountApplica
         }
     }
  
+    /**
+     * Validates that the customer does not already hold an active account
+     * for the given credit product.
+     *
+     * @param customer      the customer
+     * @param creditProduct the credit product
+     * @throws BusinessRuleException if an active account already exists
+     */
     private void validateNoActiveAccount(Customer customer, CreditProduct creditProduct) {
         if (activeAccountChecker.hasActiveAccount(customer.getCustomerId(), creditProduct.getCreditProductId())) {
             throw new BusinessRuleException(
@@ -377,6 +404,14 @@ public class CreditAccountApplicationServiceImpl implements CreditAccountApplica
         }
     }
  
+    /**
+     * Validates employment-related details in the application request.
+     *
+     * <p>For salaried applicants, employer name is mandatory.</p>
+     *
+     * @param request the application request
+     * @throws BusinessRuleException if required fields are missing
+     */
     private void validateEmploymentDetails(CreditCardApplicationRequest request) {
         if (request.getEmploymentType() == EmploymentType.SALARIED
                 && (request.getEmployerName() == null || request.getEmployerName().isBlank())) {
@@ -384,7 +419,14 @@ public class CreditAccountApplicationServiceImpl implements CreditAccountApplica
         }
     }
  
-    // Private helpers — entity building + decision application
+    /**
+     * Builds a {@link CreditCardApplication} entity from request data.
+     *
+     * @param request       the application request
+     * @param customer      the customer entity
+     * @param creditProduct the selected credit product
+     * @return populated application entity (not yet persisted)
+     */
  
     private CreditCardApplication buildApplication(
             CreditCardApplicationRequest request, Customer customer, CreditProduct creditProduct) {
@@ -402,6 +444,12 @@ public class CreditAccountApplicationServiceImpl implements CreditAccountApplica
         return app;
     }
  
+    /**
+     * Applies System underwriting decision results to the application entity.
+     *
+     * @param app      the application entity
+     * @param decision the underwriting decision result
+     */
     private void applyDecisionToApplication(CreditCardApplication app, UnderwritingDecision decision) {
         app.setRiskScore(decision.getRiskScore());
         app.setDecision(decision.getDecision());
@@ -419,6 +467,13 @@ public class CreditAccountApplicationServiceImpl implements CreditAccountApplica
         }
     }
  
+    /**
+     * Applies a manual decision (approval/rejection) to an application.
+     *
+     * @param app     the application entity
+     * @param request the decision request
+     * @throws BusinessRuleException if required approval fields are missing
+     */
     private void applyManualDecision(CreditCardApplication app, ApplicationDecisionRequest request) {
         if (request.isApproved()) {
             if (request.getApprovedCreditLimit() == null || request.getApprovedApr() == null) {
@@ -436,6 +491,15 @@ public class CreditAccountApplicationServiceImpl implements CreditAccountApplica
         app.setDecisionAt(Instant.now());
     }
  
+    /**
+     * Safely creates a credit account for an approved application.
+     *
+     * <p>Prevents duplicate account creation and wraps failures into business exceptions.</p>
+     *
+     * @param saved the approved application
+     * @throws ConflictException if account already exists
+     * @throws BusinessRuleException if account creation fails
+     */
     private void createAccountGuarded(CreditCardApplication saved) {
         if (creditAccountService.accountExistsForApplication(saved.getApplicationId())) {
             throw new ConflictException("Credit account already exists for this application");
@@ -447,6 +511,13 @@ public class CreditAccountApplicationServiceImpl implements CreditAccountApplica
         }
     }
  
+    /**
+     * Retrieves an application by ID.
+     *
+     * @param applicationId the application ID
+     * @return the application entity
+     * @throws ResourceNotFoundException if not found
+     */
     private CreditCardApplication findApplicationById(UUID applicationId) {
         return applicationRepository.findById(applicationId)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -454,7 +525,11 @@ public class CreditAccountApplicationServiceImpl implements CreditAccountApplica
     }
     
     /**
-     * Parses string status to enum safely.
+     * Converts a string representation of status into {@link ApplicationStatus}.
+     *
+     * @param status the status string
+     * @return parsed enum value
+     * @throws BadRequestException if invalid status is provided
      */
     private ApplicationStatus parseApplicationStatus(String status) {
         try {

@@ -38,7 +38,7 @@ import jakarta.validation.Valid;
  *
  * <p>All responses are wrapped in {@link ApiResponse}
  */
-@Tag(name = "Customer Address", description = "APIs for managing customer addresses")
+@Tag(name = "5. Customer Address", description = "APIs for managing customer addresses")
 @RequestMapping("/api/v1/customers/addresses")
 public interface CustomerAddressApi {
 

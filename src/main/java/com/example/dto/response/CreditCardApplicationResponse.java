@@ -91,7 +91,7 @@ private BigDecimal monthlyIncome;
 private BigDecimal existingLiabilities;
 
 @Schema(
-    description = "Credit score recorded at the time of application",
+    description = "Credit score of user  at the time of application",
     example = "720",
     minimum = "300",
     maximum = "900"

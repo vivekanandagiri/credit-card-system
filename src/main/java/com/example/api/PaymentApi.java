@@ -34,7 +34,7 @@ import jakarta.validation.Valid;
  * <p><b>Note:</b> These are public APIs — authentication may not be required
  * depending on system design (e.g., third-party payment gateways).
  */
-@Tag(name = "Payments", description = "Public APIs for credit card bill payments")
+@Tag(name = "12. Payments", description = "Public APIs for credit card bill payments")
 @RequestMapping("/api/v1/accounts/{accountId}/payments")
 public interface PaymentApi {
 

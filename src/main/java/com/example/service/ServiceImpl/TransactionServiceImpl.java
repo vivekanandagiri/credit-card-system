@@ -6,7 +6,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 import java.util.UUID;
 
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -17,6 +16,7 @@ import org.springframework.stereotype.Service;
 import com.example.dto.request.TransactionRequest;
 import com.example.dto.response.TransactionDetailResponse;
 import com.example.dto.response.TransactionSummaryResponse;
+import com.example.entity.Authorization;
 import com.example.entity.CreditAccount;
 import com.example.entity.CreditCard;
 import com.example.entity.CreditCardProduct;
@@ -34,9 +34,11 @@ import com.example.exception.BadRequestException;
 import com.example.exception.ResourceNotFoundException;
 import com.example.mapper.TransactionMapper;
 import com.example.repository.TransactionRepository;
+import com.example.service.AuthorizationService;
 import com.example.service.CreditAccountService;
 import com.example.service.CreditCardService;
 import com.example.service.CustomerService;
+import com.example.service.LedgerService;
 import com.example.service.TransactionService;
 import com.example.specification.TransactionSpecification;
 import com.example.util.ReferenceNumberGenerator;
@@ -83,6 +85,8 @@ public class TransactionServiceImpl  implements TransactionService{
 	    private final CreditAccountService creditAccountService;
 	    private final TransactionMapper transactionMapper;
 	    private final ReferenceNumberGenerator referenceNumberGenerator;
+	    private final LedgerService ledgerService;
+	    private final AuthorizationService authorizationService;
 
 	    public TransactionServiceImpl(
 	            TransactionRepository transactionRepository,
@@ -90,7 +94,7 @@ public class TransactionServiceImpl  implements TransactionService{
 	            CreditCardService creditCardService,
 	            CreditAccountService creditAccountService,
 	            TransactionMapper transactionMapper,
-	            ReferenceNumberGenerator referenceNumberGenerator) {
+	            ReferenceNumberGenerator referenceNumberGenerator, LedgerServiceImpl ledgerService, AuthorizationService authorizationService) {
 
 	        this.transactionRepository = transactionRepository;
 	        this.customerService = customerService;
@@ -98,6 +102,8 @@ public class TransactionServiceImpl  implements TransactionService{
 	        this.creditAccountService = creditAccountService;
 	        this.transactionMapper = transactionMapper;
 	        this.referenceNumberGenerator = referenceNumberGenerator;
+			this.ledgerService = ledgerService;
+			this.authorizationService = authorizationService;
 	    }
 	
 
@@ -137,125 +143,123 @@ public class TransactionServiceImpl  implements TransactionService{
 	 * @throws BadRequestException     if request is invalid
 	 * @throws AccessDeniedException   if card does not belong to user
 	 */
-	@Override
-	public TransactionSummaryResponse postTransaction(UUID userId, UUID cardId, TransactionRequest request) {
+	    @Override
+	    public TransactionSummaryResponse postTransaction(UUID userId, UUID cardId, TransactionRequest request) {
 
-		//1. Basic validations
-		if(request.getAmount().compareTo(BigDecimal.ZERO)<=0) {
-			throw new BadRequestException("Transaction amount  must be greater than ZERO");
-		}
-		//2. Transaction channel check
-		if (request.getTransactionType() == null) {
-            throw new BadRequestException("Transaction type required");
-        }
-	    if (request.getTransactionChannel() == null) {
-	        throw new BadRequestException("Transaction channel is required");
-	    }
-	    if (request.getTransactionReference() == null ||
-	            request.getTransactionReference().isBlank()) {
+	        if (request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+	            throw new BadRequestException("Transaction amount must be greater than ZERO");
+	        }
+
+	        if (request.getTransactionReference() == null || request.getTransactionReference().isBlank()) {
 	            throw new BadRequestException("Transaction reference is required");
 	        }
-	    // ❌ BLOCK PAYMENT TYPE (important)
-        if (request.getTransactionType() == TransactionType.PAYMENT) {
-            throw new BadRequestException("Use Payment API for bill payments");
-        }
-		
-		//3. Customer check
-		Customer customer = customerService.getCustomerByUserId(userId);
-		//5. Delegate Credit card lookup to CreditCardService
-		CreditCard creditCard = creditCardService.getCardEntity(cardId);
-		//6. card must belong to same user
-		if(! creditCard.getCreditAccount().getCustomer().getCustomerId().equals(customer.getCustomerId())) {
-			throw new AccessDeniedException("Access denied to this card");
-		}
-		
-		CreditAccount creditAccount = creditCard.getCreditAccount();
-		
-		TransactionType txnType = request.getTransactionType();
-		TransactionChannel txnChannel = request.getTransactionChannel();
-		
-		//7.Card Status Check (Must be active)
-		if(creditCard.getCardStatus() != CardStatus.ACTIVE) {
-			return handleDeclined
-					(creditCard, creditAccount, txnType, txnChannel, request, "Card is not Active. Current Status:"+creditCard.getCardStatus());			
-		}
-		
-		//8. Channel Validation
-		validateChannel(creditCard, txnChannel);
-		
-		//10. Card Expiry Check
-				if (creditCard.getExpiresAt() != null &&
-					    creditCard.getExpiresAt().isBefore(Instant.now())) {
 
-					    return handleDeclined(
-					            creditCard, creditAccount, txnType, txnChannel,
-					            request, "Card is expired"
-					    );
-					}
-		
-		//9. Balance check(check Sufficient credit limit available or not)--Only for debit types
-		if (isDebit(txnType) && creditAccount.getAvailableBalance().compareTo(request.getAmount()) < 0) {
-			return handleDeclined(creditCard, creditAccount, txnType, txnChannel, request,
-					"Insufficient balance");
+	        if (request.getTransactionType() == TransactionType.PAYMENT) {
+	            throw new BadRequestException("Use Payment API for bill payments");
+	        }
 
-		}
-		
-		//7. Daily Limit check
-		
-		BigDecimal dailyLimit = resolveDailyLimit(creditCard.getCardProduct(), txnType,txnChannel);
-        
-		if (dailyLimit != null) {
-            BigDecimal spentToday = getSpentToday(creditCard.getCardId(), txnType,txnChannel);
-            if (spentToday.add(request.getAmount()).compareTo(dailyLimit) > 0) {
-                BigDecimal remaining = dailyLimit.subtract(spentToday).max(BigDecimal.ZERO);
-                return handleDeclined(creditCard, creditAccount, txnType, txnChannel, request,
-                        "Daily limit exceeded. Remaining: " + remaining);
-            }
-        }
-		
-		//=============All validation check completed================
-		//Balance calculation 
-		BigDecimal balanceBefore = creditAccount.getAvailableBalance();
-		if (isDebit(txnType)) {
-		    // PURCHASE, FEE, INTEREST
-		    creditAccountService.deductBalance(
-		            creditAccount.getAccountId(),
-		            request.getAmount()
-		    );
-		} else {
-		    // REFUND, PAYMENT
-		    creditAccountService.addBalance(
-		            creditAccount.getAccountId(),
-		            request.getAmount()
-		    );
-		}
-		// Compute balance after (based on actual operation)
-	    BigDecimal balanceAfter = isDebit(txnType)
-	            ? balanceBefore.subtract(request.getAmount())// PURCHASE → increase debt
-	            : balanceBefore.add(request.getAmount());// PAYMENT → reduce debt
+	        //  IDEMPOTENCY
+	        Optional<Transaction> existing =
+	                transactionRepository.findByNetworkReference(request.getTransactionReference());
 
-		
-	    Transaction txn = buildTransaction(
-	            creditCard, creditAccount,
-	            txnType, txnChannel,
-	            TransactionStatus.APPROVED,
-	            request, balanceBefore, balanceAfter, null
-	    );
-	    
-	    //Handle Race Condition
-	    try {
-	        transactionRepository.save(txn);
-	    } catch (DataIntegrityViolationException ex) {
+	        if (existing.isPresent()) {
+	            return transactionMapper.toSummaryResponse(existing.get());
+	        }
 
-	        Transaction existing = transactionRepository
-	                .findByTransactionReference(request.getTransactionReference())
-	                .orElseThrow();
+	        Customer customer = customerService.getCustomerByUserId(userId);
+	        CreditCard creditCard = creditCardService.getCardEntity(cardId);
 
-	        return transactionMapper.toSummaryResponse(existing);
+	        if (!creditCard.getCreditAccount().getCustomer().getCustomerId().equals(customer.getCustomerId())) {
+	            throw new AccessDeniedException("Access denied to this card");
+	        }
+
+	        CreditAccount account = creditCard.getCreditAccount();
+
+	        TransactionType txnType = request.getTransactionType();
+	        TransactionChannel txnChannel = request.getTransactionChannel();
+
+	        if (creditCard.getCardStatus() != CardStatus.ACTIVE) {
+	            return handleDeclined(creditCard, account, txnType, txnChannel, request, "Card inactive");
+	        }
+
+	        validateChannel(creditCard, txnChannel);
+
+	        if (creditCard.getExpiresAt() != null &&
+	                creditCard.getExpiresAt().isBefore(Instant.now())) {
+	            return handleDeclined(creditCard, account, txnType, txnChannel, request, "Card expired");
+	        }
+
+	        // USE LEDGER FOR LIMIT CHECK
+	        BigDecimal currentOutstanding = ledgerService.getBalance(account.getAccountId()).abs();
+
+	        if (isDebit(txnType) &&
+	                currentOutstanding.add(request.getAmount()).compareTo(account.getCreditLimit()) > 0) {
+	            return handleDeclined(creditCard, account, txnType, txnChannel, request, "Insufficient limit");
+	        }
+
+	        // DAILY LIMIT
+	        BigDecimal dailyLimit = resolveDailyLimit(creditCard.getCardProduct(), txnType, txnChannel);
+
+	        if (dailyLimit != null) {
+	            BigDecimal spentToday = getSpentToday(creditCard.getCardId(), txnType, txnChannel);
+	            if (spentToday.add(request.getAmount()).compareTo(dailyLimit) > 0) {
+	                return handleDeclined(creditCard, account, txnType, txnChannel, request, "Daily limit exceeded");
+	            }
+	        }
+
+	        //  AUTHORIZATION (HOLD)
+
+	        Authorization auth = authorizationService.authorize(
+	                account.getAccountId(),
+	                creditCard.getCardId(),
+	                request.getAmount(),
+	                request.getTransactionReference()
+	        );
+	        Transaction txn;
+	        Instant txnTime = Instant.now();
+
+	        try {
+	        	// CREATE TRANSACTION
+	            txn = buildTransaction(
+	                    creditCard, account,
+	                    txnType, txnChannel,
+	                    TransactionStatus.APPROVED,
+	                    request,
+	                    null, null, null,txnTime
+	            );
+
+	            txn.setAuthorizationId(auth.getId());
+
+	            transactionRepository.save(txn);
+	     
+	            if (isDebit(txnType)) {
+		            ledgerService.debit(account.getAccountId(), request.getAmount(), "TRANSACTION", txn.getTransactionId(),txnTime);
+		        } else {
+		            ledgerService.credit(account.getAccountId(), request.getAmount(), "TRANSACTION", txn.getTransactionId(),txnTime);
+		        }
+	            // CAPTURE
+	            authorizationService.capture(auth.getId());
+
+	        } catch (Exception ex) {
+
+	            authorizationService.expire(auth.getId());
+
+	            txn = buildTransaction(
+	                    creditCard, account,
+	                    txnType, txnChannel,
+	                    TransactionStatus.DECLINED,
+	                    request,
+	                    null, null,
+	                    ex.getMessage(),
+	                    txnTime
+	            );
+
+	            transactionRepository.save(txn);
+	            throw ex;
+	        }
+
+	        return transactionMapper.toSummaryResponse(txn);
 	    }
-
-        return transactionMapper.toSummaryResponse(txn);
-	}
 
 	/**
 	 * Retrieves paginated transaction history for a specific account.
@@ -375,27 +379,19 @@ public class TransactionServiceImpl  implements TransactionService{
     @Override
     public TransactionSummaryResponse recordPayment(
             CreditAccount account,
-            Payment payment,
-            BigDecimal balanceBefore,
-            BigDecimal balanceAfter) {
+            Payment payment) {
 
-        // 🔒 1. Idempotency check
-//        if (transactionRepository.existsByPayment(payment)) {
-//            throw new IllegalStateException(
-//                    "Transaction already exists for payment: " + payment.getPaymentId()
-//            );
-//        }
 
-        // 🛡️ 2. Basic validation
+        // 2. Basic validation
         if (payment.getAmount() == null ||
             payment.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
             throw new BadRequestException("Invalid payment amount");
         }
 
-        // 🧠 3. Resolve channel
+        // 3. Resolve channel
         TransactionChannel channel = resolveChannel(payment.getPaymentMethod());
 
-        // 🏗️ 4. Build transaction
+        // 4. Build transaction
         Transaction txn = new Transaction();
 
         txn.setCard(null);
@@ -406,19 +402,28 @@ public class TransactionServiceImpl  implements TransactionService{
         txn.setAmount(payment.getAmount());
         txn.setCurrency(Currency.INR);
 
-        txn.setBalanceBefore(balanceBefore);
-        txn.setBalanceAfter(balanceAfter);
-
         txn.setPayment(payment);
-
-        txn.setReferenceNumber(payment.getReferenceId());
+        txn.setInternalReference(payment.getReferenceId());
+        txn.setNetworkReference(null);
 
         txn.setTransactionTime(
                 payment.getPaidAt() != null ? payment.getPaidAt() : Instant.now()
         );
+        Instant paymentTime = payment.getPaidAt() != null
+                ? payment.getPaidAt()
+                : Instant.now();
+        txn.setTransactionTime(paymentTime);
 
-        transactionRepository.save(txn);
 
+        Transaction saved = transactionRepository.save(txn);
+        ledgerService.credit(
+                account.getAccountId(),
+                payment.getAmount(),
+                "PAYMENT",
+                saved.getTransactionId(),
+                paymentTime                
+               
+        );
         return transactionMapper.toSummaryResponse(txn);
     }
     
@@ -485,7 +490,8 @@ public class TransactionServiceImpl  implements TransactionService{
 	            request,
 	            balance,
 	            balance,
-	            reason
+	            reason,
+	            Instant.now()
 	    );
 
 	    transactionRepository.save(txn);
@@ -528,7 +534,7 @@ public class TransactionServiceImpl  implements TransactionService{
                                           TransactionRequest request,
                                           BigDecimal balanceBefore,
                                           BigDecimal balanceAfter,
-                                          String declineReason) {
+                                          String declineReason,Instant createdAt) {
         Transaction txn = new Transaction();
         txn.setCard(creditCard);
         txn.setAccount(creditAccount);
@@ -540,16 +546,14 @@ public class TransactionServiceImpl  implements TransactionService{
         txn.setMerchantName(request.getMerchantName());
         txn.setMerchantCategoryCode(request.getMerchantCategoryCode());
         txn.setMerchantCategoryName(request.getMerchantCategoryName());
-        txn.setBalanceBefore(balanceBefore);
-        txn.setBalanceAfter(balanceAfter);
         txn.setDeclineReason(declineReason);
-        txn.setTransactionReference(request.getTransactionReference());
-        txn.setReferenceNumber(
+        txn.setNetworkReference(request.getTransactionReference());
+        txn.setInternalReference(
         	    request.getTransactionReference() != null
         	        ? request.getTransactionReference()
         	        : referenceNumberGenerator.generate()
         	);
-        txn.setTransactionTime(Instant.now());
+        txn.setTransactionTime(createdAt != null ? createdAt : Instant.now());
 
         return txn;
     }
@@ -658,15 +662,13 @@ public class TransactionServiceImpl  implements TransactionService{
 		}
 	}
 
-
-
 	@Override
 	@Transactional(readOnly = true)
 	public TransactionSummaryResponse getByTransactionReference(
 	        String transactionReference) {
 
 	    Transaction txn = transactionRepository
-	            .findByTransactionReference(transactionReference)
+	            .findByNetworkReference(transactionReference)
 	            .orElseThrow(() ->
 	                    new ResourceNotFoundException(
 	                            "Transaction not found"));
@@ -675,36 +677,26 @@ public class TransactionServiceImpl  implements TransactionService{
 	}
 	
 	@Override
+	@Transactional
 	public TransactionSummaryResponse postSystemTransaction(
 	        CreditAccount account,
 	        TransactionType type,
 	        BigDecimal amount,
 	        String description,
-	        String reference) {
+	        String reference,Instant createdAt) {
 
-	    if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-	        throw new BadRequestException("Invalid system transaction amount");
-	    }
-
-	    // 🔒 IDEMPOTENCY
 	    Optional<Transaction> existing =
-	            transactionRepository.findByReferenceNumber(reference);
+	            transactionRepository.findByInternalReference(reference);
 
 	    if (existing.isPresent()) {
-	        return transactionMapper.toSummaryResponse(existing.get());
+
+	        ledgerService.deleteByReferenceId(existing.get().getTransactionId()); // or repo
+
+	        transactionRepository.delete(existing.get());
 	    }
-
-	    BigDecimal balanceBefore = account.getAvailableBalance();
-
-	    if (isDebit(type)) {
-	        creditAccountService.deductBalance(account.getAccountId(), amount);
-	    }
-
-	    BigDecimal balanceAfter = isDebit(type)
-	            ? balanceBefore.subtract(amount)
-	            : balanceBefore.add(amount);
 
 	    Transaction txn = new Transaction();
+
 	    txn.setCard(null);
 	    txn.setAccount(account);
 	    txn.setTransactionType(type);
@@ -713,15 +705,19 @@ public class TransactionServiceImpl  implements TransactionService{
 	    txn.setAmount(amount);
 	    txn.setCurrency(Currency.INR);
 
-	    
 	    txn.setMerchantName(description != null ? description : type.name());
-	    txn.setBalanceBefore(balanceBefore);
-	    txn.setBalanceAfter(balanceAfter);
 
-	    txn.setReferenceNumber(reference); // 🔥 deterministic
-	    txn.setTransactionTime(Instant.now());
+	    txn.setInternalReference(reference);
+	    txn.setTransactionTime(createdAt != null ? createdAt : Instant.now());
 
 	    transactionRepository.save(txn);
+
+	    //  LEDGER
+	    if (isDebit(type)) {
+	        ledgerService.debit(account.getAccountId(), amount, "SYSTEM", txn.getTransactionId(),createdAt);
+	    } else {
+	        ledgerService.credit(account.getAccountId(), amount, "SYSTEM", txn.getTransactionId(),createdAt);
+	    }
 
 	    return transactionMapper.toSummaryResponse(txn);
 	}

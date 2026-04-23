@@ -31,7 +31,7 @@ import java.util.UUID;
  *
  * <p>All responses are wrapped in {@link ApiResponse}
  */
-@Tag(name = "Billing Statement API", description = "APIs for managing billing statements")
+@Tag(name = "11. Billing Statement API", description = "APIs for managing billing statements")
 @RequestMapping("/api/v1/accounts")
 public interface BillingStatementApi {
 

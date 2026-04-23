@@ -72,7 +72,7 @@ class CreditAccountControllerTest {
                 .thenReturn(responses);
 
         CustomUserPrincipal principal =
-                new CustomUserPrincipal(userId, null, "test@test.com", UserRole.CUSTOMER);
+                new CustomUserPrincipal(userId, null, "test@test.com", null, UserRole.CUSTOMER);
 
         mockMvc.perform(get("/api/v1/accounts")
                         .with(user(principal)))
@@ -93,7 +93,7 @@ class CreditAccountControllerTest {
                 .thenReturn(responses);
 
         CustomUserPrincipal principal =
-                new CustomUserPrincipal(userId, null, "admin@test.com", UserRole.ADMIN);
+                new CustomUserPrincipal(userId, null, "admin@test.com", null, UserRole.ADMIN);
 
         mockMvc.perform(get("/api/v1/accounts")
                         .param("status", "ACTIVE")
@@ -118,7 +118,7 @@ class CreditAccountControllerTest {
                 .thenReturn(response);
 
         CustomUserPrincipal principal =
-                new CustomUserPrincipal(userId, null, "test@test.com", UserRole.CUSTOMER);
+                new CustomUserPrincipal(userId, null, "test@test.com", null, UserRole.CUSTOMER);
 
         mockMvc.perform(get("/api/v1/accounts/{id}", accountId)
                         .with(user(principal)))
@@ -140,7 +140,7 @@ class CreditAccountControllerTest {
                 .thenReturn(response);
 
         CustomUserPrincipal principal =
-                new CustomUserPrincipal(userId, null, "admin@test.com", UserRole.ADMIN);
+                new CustomUserPrincipal(userId, null, "admin@test.com", null, UserRole.ADMIN);
 
         mockMvc.perform(get("/api/v1/accounts/{id}", accountId)
                         .with(user(principal)))
@@ -168,7 +168,7 @@ class CreditAccountControllerTest {
 
         CustomUserPrincipal principal =
                 new CustomUserPrincipal(
-                        UUID.randomUUID(), null, "admin@test.com", UserRole.ADMIN);
+                        UUID.randomUUID(), null, "admin@test.com", null, UserRole.ADMIN);
 
         mockMvc.perform(patch("/api/v1/accounts/{id}", accountId)
                         .with(user(principal))

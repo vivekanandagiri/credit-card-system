@@ -35,7 +35,7 @@ import java.util.UUID;
  *
  * <p>All responses are wrapped in {@link ApiResponse}
  */
-@Tag(name = "Credit Account API", description = "APIs for managing credit accounts")
+@Tag(name = "8. Credit Account API", description = "APIs for managing credit accounts")
 @RequestMapping("/api/v1/accounts")
 public interface CreditAccountApi {
 

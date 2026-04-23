@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 
+import java.io.Serial;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
@@ -13,17 +14,18 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import com.example.enums.UserRole;
-
 @Getter
 @AllArgsConstructor
 @EqualsAndHashCode
 public class CustomUserPrincipal implements UserDetails {
 
+    @Serial
     private static final long serialVersionUID = 1L;
 
     private final UUID userId;
     private final UUID customerId;
     private final String email;
+    private final String passwordHash;
     private final UserRole role;
 
     @Override
@@ -33,7 +35,7 @@ public class CustomUserPrincipal implements UserDetails {
 
     @Override
     public String getPassword() {
-        return ""; // ✅ safe
+        return passwordHash; // ✅ FIXED
     }
 
     @Override

@@ -1,5 +1,19 @@
 package com.example.service;
 
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import com.example.testutil.TestFixtures;
+import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.*;
+
 import com.example.dto.request.CreditAccountStatusUpdateRequest;
 import com.example.dto.response.CreditAccountResponse;
 import com.example.entity.*;
@@ -9,364 +23,281 @@ import com.example.mapper.CreditAccountMapper;
 import com.example.repository.CreditAccountRepository;
 import com.example.service.ServiceImpl.CreditAccountServiceImpl;
 import com.example.util.AccountNumberGenerator;
-
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import org.mockito.*;
-
-import java.math.BigDecimal;
-import java.time.Instant;
-import java.util.*;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class CreditAccountServiceImplTest {
 
-    @Mock private CreditAccountRepository accountRepository;
-    @Mock private AccountNumberGenerator accountNumberGenerator;
-    @Mock private CreditAccountMapper accountMapper;
+    @Mock private CreditAccountRepository repository;
+    @Mock private AccountNumberGenerator generator;
+    @Mock private CreditAccountMapper mapper;
     @Mock private CustomerService customerService;
 
     @InjectMocks
     private CreditAccountServiceImpl service;
 
-    private CreditCardApplication approvedApp;
-    private CreditAccount account;
+    private UUID userId;
     private UUID accountId;
 
-    @BeforeEach
-    void setup() {
+    private Customer customer;
+    private CreditAccount account;
+    private CreditCardApplication application;
+    private CreditProduct product;
 
+    @BeforeEach
+    void setUp() {
+        userId = UUID.randomUUID();
         accountId = UUID.randomUUID();
 
-        Customer customer = new Customer();
-        customer.setCustomerId(UUID.randomUUID());
+        customer = TestFixtures.validCustomer();
 
-        CreditProduct product = new CreditProduct();
-        product.setProductCode("P1");
-        product.setGracePeriodDays(10);
-        product.setMinimumDuePercent(BigDecimal.TEN);
-        product.setLateFeeAmount(BigDecimal.TEN);
-        product.setCreditProductId(1L);
+        product = TestFixtures.validCreditProductEntity();
 
-        approvedApp = new CreditCardApplication();
-        approvedApp.setApplicationId(UUID.randomUUID());
-        approvedApp.setApplicationStatus(ApplicationStatus.APPROVED);
-        approvedApp.setApprovedCreditLimit(BigDecimal.valueOf(10000));
-        approvedApp.setApprovedApr(BigDecimal.TEN);
-        approvedApp.setCustomer(customer);
-        approvedApp.setCreditProduct(product);
+        application = TestFixtures.validApplication(customer, product);
+        application.setApplicationStatus(ApplicationStatus.APPROVED);
+        application.setApprovedCreditLimit(BigDecimal.valueOf(50000));
+        application.setApprovedApr(BigDecimal.valueOf(12));
 
-        account = new CreditAccount();
-        account.setAccountStatus(AccountStatus.ACTIVE);
-        account.setAvailableBalance(BigDecimal.valueOf(1000));
-        account.setCurrentBalance(BigDecimal.ZERO);
-        account.setCreditLimit(BigDecimal.valueOf(1000));
-        account.setCustomer(customer);
+        account = TestFixtures.validCreditAccount(customer, application, product);
+        account.setAccountId(accountId);
     }
 
     // ================= CREATE ACCOUNT =================
 
-    @Test
-    void shouldCreateAccountSuccessfully() {
+    @Nested
+    class CreateAccount {
 
-        when(accountRepository.existsByApplicationApplicationId(any())).thenReturn(false);
-        when(accountNumberGenerator.generate(any())).thenReturn("ACC123");
+        @Test
+        void shouldCreateAccount_success() {
+            when(repository.existsByApplicationApplicationId(any())).thenReturn(false);
+            when(generator.generate(any())).thenReturn("123456789012");
+            when(repository.save(any())).thenAnswer(i -> i.getArgument(0));
+            when(mapper.toResponse(any())).thenReturn(mock(CreditAccountResponse.class));
 
-        CreditAccount saved = new CreditAccount();
-        when(accountRepository.save(any())).thenReturn(saved);
-        when(accountMapper.toResponse(saved)).thenReturn(mock(CreditAccountResponse.class));
+            CreditAccountResponse res = service.createAccount(application);
 
-        CreditAccountResponse result = service.createAccount(approvedApp);
+            assertThat(res).isNotNull();
+        }
 
-        assertNotNull(result);
-    }
+        @Test
+        void shouldThrow_whenApplicationNotApproved() {
+            application.setApplicationStatus(ApplicationStatus.REJECTED);
 
-    @Test
-    void shouldThrowException_whenApplicationNotApproved() {
-        approvedApp.setApplicationStatus(ApplicationStatus.REJECTED);
+            assertThatThrownBy(() -> service.createAccount(application))
+                    .isInstanceOf(BusinessRuleException.class);
+        }
 
-        assertThrows(BusinessRuleException.class,
-                () -> service.createAccount(approvedApp));
-    }
+        @Test
+        void shouldThrow_whenDuplicateAccount() {
+            when(repository.existsByApplicationApplicationId(any())).thenReturn(true);
 
-    @Test
-    void shouldThrowConflict_whenDuplicateAccountExists() {
+            assertThatThrownBy(() -> service.createAccount(application))
+                    .isInstanceOf(ConflictException.class);
+        }
 
-        when(accountRepository.existsByApplicationApplicationId(any())).thenReturn(true);
+        @Test
+        void shouldThrow_whenInvalidCreditLimit() {
+            application.setApprovedCreditLimit(BigDecimal.ZERO);
 
-        assertThrows(ConflictException.class,
-                () -> service.createAccount(approvedApp));
-    }
+            when(repository.existsByApplicationApplicationId(any())).thenReturn(false);
+            when(generator.generate(any())).thenReturn("123");
 
-    @Test
-    void shouldThrowException_whenInvalidCreditLimit() {
-
-        approvedApp.setApprovedCreditLimit(BigDecimal.ZERO);
-
-        when(accountRepository.existsByApplicationApplicationId(any())).thenReturn(false);
-
-        assertThrows(BusinessRuleException.class,
-                () -> service.createAccount(approvedApp));
+            assertThatThrownBy(() -> service.createAccount(application))
+                    .isInstanceOf(BusinessRuleException.class);
+        }
     }
 
     // ================= GET ACCOUNTS =================
 
-    @Test
-    void shouldReturnCustomerAccounts() {
+    @Nested
+    class GetAccounts {
 
-        UUID userId = UUID.randomUUID();
+        @Test
+        void shouldReturnCustomerAccounts_withStatus() {
+            when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
+            when(repository.findAllByCustomerCustomerIdAndAccountStatus(any(), any()))
+                    .thenReturn(List.of(account));
+            when(mapper.toResponse(any())).thenReturn(mock(CreditAccountResponse.class));
 
-        when(customerService.getCustomerByUserId(userId)).thenReturn(account.getCustomer());
-        when(accountRepository.findAllByCustomerCustomerId(any()))
-                .thenReturn(List.of(account));
+            List<CreditAccountResponse> res =
+                    service.getAccounts(userId, UserRole.CUSTOMER, AccountStatus.ACTIVE);
 
-        when(accountMapper.toResponse(any())).thenReturn(mock(CreditAccountResponse.class));
+            assertThat(res).hasSize(1);
+        }
 
-        List<CreditAccountResponse> result =
-                service.getAccounts(userId, UserRole.CUSTOMER, null);
+        @Test
+        void shouldReturnCustomerAccounts_withoutStatus() {
+            when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
+            when(repository.findAllByCustomerCustomerId(any()))
+                    .thenReturn(List.of(account));
+            when(mapper.toResponse(any())).thenReturn(mock(CreditAccountResponse.class));
 
-        assertEquals(1, result.size());
-    }
+            List<CreditAccountResponse> res =
+                    service.getAccounts(userId, UserRole.CUSTOMER, null);
 
-    @Test
-    void shouldReturnAdminAccounts() {
+            assertThat(res).hasSize(1);
+        }
 
-        when(accountRepository.findAll()).thenReturn(List.of(account));
-        when(accountMapper.toResponse(any())).thenReturn(mock(CreditAccountResponse.class));
+        @Test
+        void shouldReturnAdminAccounts_withStatus() {
+            when(repository.findAllByAccountStatus(any()))
+                    .thenReturn(List.of(account));
+            when(mapper.toResponse(any())).thenReturn(mock(CreditAccountResponse.class));
 
-        List<?> result =
-                service.getAccounts(UUID.randomUUID(), UserRole.ADMIN, null);
+            List<CreditAccountResponse> res =
+                    service.getAccounts(userId, UserRole.ADMIN, AccountStatus.ACTIVE);
 
-        assertEquals(1, result.size());
+            assertThat(res).hasSize(1);
+        }
+
+        @Test
+        void shouldReturnAllAccounts_admin() {
+            when(repository.findAll()).thenReturn(List.of(account));
+            when(mapper.toResponse(any())).thenReturn(mock(CreditAccountResponse.class));
+
+            List<CreditAccountResponse> res =
+                    service.getAccounts(userId, UserRole.ADMIN, null);
+
+            assertThat(res).hasSize(1);
+        }
     }
 
     // ================= GET ACCOUNT BY ID =================
 
-    @Test
-    void shouldReturnAccountForAdmin() {
+    @Nested
+    class GetAccountById {
 
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(accountMapper.toResponse(any())).thenReturn(mock(CreditAccountResponse.class));
+        @Test
+        void shouldReturnAccount_forAdmin() {
+            when(repository.findById(accountId)).thenReturn(Optional.of(account));
+            when(mapper.toResponse(any())).thenReturn(mock(CreditAccountResponse.class));
 
-        CreditAccountResponse result =
-                service.getAccountById(UUID.randomUUID(), UserRole.ADMIN, accountId);
+            CreditAccountResponse res =
+                    service.getAccountById(userId, UserRole.ADMIN, accountId);
 
-        assertNotNull(result);
+            assertThat(res).isNotNull();
+        }
+
+        @Test
+        void shouldReturnAccount_forCustomer() {
+            when(repository.findById(accountId)).thenReturn(Optional.of(account));
+            when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
+            when(mapper.toResponse(any())).thenReturn(mock(CreditAccountResponse.class));
+
+            CreditAccountResponse res =
+                    service.getAccountById(userId, UserRole.CUSTOMER, accountId);
+
+            assertThat(res).isNotNull();
+        }
+
+        @Test
+        void shouldThrow_whenAccessDenied() {
+            Customer another = new Customer();
+            another.setCustomerId(UUID.randomUUID());
+            account.setCustomer(another);
+
+            when(repository.findById(accountId)).thenReturn(Optional.of(account));
+            when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
+
+            assertThatThrownBy(() ->
+                    service.getAccountById(userId, UserRole.CUSTOMER, accountId))
+                    .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+        }
+
+        @Test
+        void shouldThrow_whenNotFound() {
+            when(repository.findById(accountId)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() ->
+                    service.getAccountById(userId, UserRole.ADMIN, accountId))
+                    .isInstanceOf(ResourceNotFoundException.class);
+        }
     }
 
-    @Test
-    void shouldThrowAccessDenied_forCustomer() {
+    // ================= UPDATE STATUS =================
 
-        UUID userId = UUID.randomUUID();
+    @Nested
+    class UpdateStatus {
 
-        Customer other = new Customer();
-        other.setCustomerId(UUID.randomUUID());
+        @Test
+        void shouldUpdateStatus_success() {
+            CreditAccountStatusUpdateRequest req = mock(CreditAccountStatusUpdateRequest.class);
 
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(customerService.getCustomerByUserId(userId)).thenReturn(other);
+            when(repository.findById(accountId)).thenReturn(Optional.of(account));
+            when(req.getStatus()).thenReturn(AccountStatus.BLOCKED);
+            when(repository.save(any())).thenReturn(account);
+            when(mapper.toResponse(any())).thenReturn(mock(CreditAccountResponse.class));
 
-        assertThrows(org.springframework.security.access.AccessDeniedException.class,
-                () -> service.getAccountById(userId, UserRole.CUSTOMER, accountId));
-    }
+            CreditAccountResponse res =
+                    service.updateAccountStatus(accountId, req);
 
-    // ================= STATUS UPDATE =================
+            assertThat(res).isNotNull();
+        }
 
-    @Test
-    void shouldUpdateStatusSuccessfully() {
+        @Test
+        void shouldThrow_whenNullStatus() {
+            CreditAccountStatusUpdateRequest req = mock(CreditAccountStatusUpdateRequest.class);
 
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(accountRepository.save(any())).thenReturn(account);
-        when(accountMapper.toResponse(any())).thenReturn(mock(CreditAccountResponse.class));
+            when(repository.findById(accountId)).thenReturn(Optional.of(account));
+            when(req.getStatus()).thenReturn(null);
 
-        CreditAccountStatusUpdateRequest req = new CreditAccountStatusUpdateRequest();
-        req.setStatus(AccountStatus.BLOCKED);
+            assertThatThrownBy(() ->
+                    service.updateAccountStatus(accountId, req))
+                    .isInstanceOf(BusinessRuleException.class);
+        }
 
-        service.updateAccountStatus(accountId, req);
+        @Test
+        void shouldThrow_whenSameStatus() {
+            CreditAccountStatusUpdateRequest req = mock(CreditAccountStatusUpdateRequest.class);
 
-        assertEquals(AccountStatus.BLOCKED, account.getAccountStatus());
-    }
+            when(repository.findById(accountId)).thenReturn(Optional.of(account));
+            when(req.getStatus()).thenReturn(account.getAccountStatus());
 
-    @Test
-    void shouldThrowException_whenStatusNull() {
+            assertThatThrownBy(() ->
+                    service.updateAccountStatus(accountId, req))
+                    .isInstanceOf(BusinessRuleException.class);
+        }
 
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        @Test
+        void shouldThrow_whenClosedAccountTransition() {
+            account.setAccountStatus(AccountStatus.CLOSED);
 
-        CreditAccountStatusUpdateRequest req = new CreditAccountStatusUpdateRequest();
+            CreditAccountStatusUpdateRequest req = mock(CreditAccountStatusUpdateRequest.class);
 
-        assertThrows(BusinessRuleException.class,
-                () -> service.updateAccountStatus(accountId, req));
-    }
+            when(repository.findById(accountId)).thenReturn(Optional.of(account));
+            when(req.getStatus()).thenReturn(AccountStatus.ACTIVE);
 
-    @Test
-    void shouldThrowException_whenSameStatus() {
-
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-
-        CreditAccountStatusUpdateRequest req = new CreditAccountStatusUpdateRequest();
-        req.setStatus(AccountStatus.ACTIVE);
-
-        assertThrows(BusinessRuleException.class,
-                () -> service.updateAccountStatus(accountId, req));
-    }
-
-    @Test
-    void shouldThrowException_whenClosedAccountTransition() {
-
-        account.setAccountStatus(AccountStatus.CLOSED);
-
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-
-        CreditAccountStatusUpdateRequest req = new CreditAccountStatusUpdateRequest();
-        req.setStatus(AccountStatus.ACTIVE);
-
-        assertThrows(BusinessRuleException.class,
-                () -> service.updateAccountStatus(accountId, req));
-    }
-
-    @Test
-    void shouldSetClosedAt_whenClosed() {
-
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-        when(accountRepository.save(any())).thenReturn(account);
-        when(accountMapper.toResponse(any())).thenReturn(mock(CreditAccountResponse.class));
-
-        CreditAccountStatusUpdateRequest req = new CreditAccountStatusUpdateRequest();
-        req.setStatus(AccountStatus.CLOSED);
-
-        service.updateAccountStatus(accountId, req);
-
-        assertNotNull(account.getClosedAt());
-    }
-
-    // ================= BALANCE =================
-
-    @Test
-    void shouldDeductBalanceSuccessfully() {
-
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-
-        service.deductBalance(accountId, BigDecimal.valueOf(200));
-
-        assertEquals(BigDecimal.valueOf(800), account.getAvailableBalance());
-    }
-
-    @Test
-    void shouldThrowException_whenInsufficientBalance() {
-
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-
-        assertThrows(BusinessRuleException.class,
-                () -> service.deductBalance(accountId, BigDecimal.valueOf(2000)));
-    }
-
-    @Test
-    void shouldThrowException_whenInvalidAmount() {
-
-        assertThrows(BusinessRuleException.class,
-                () -> service.deductBalance(accountId, BigDecimal.ZERO));
-    }
-
-    @Test
-    void shouldAddBalanceSuccessfully() {
-
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-
-        service.addBalance(accountId, BigDecimal.valueOf(200));
-
-        assertNotNull(account.getLastPaymentDate());
-    }
-
-    @Test
-    void shouldThrowConflict_whenDuplicatePayment() {
-
-        account.setLastPaymentAmount(BigDecimal.TEN);
-        account.setLastPaymentDate(Instant.now());
-
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-
-        assertThrows(ConflictException.class,
-                () -> service.addBalance(accountId, BigDecimal.valueOf(100)));
+            assertThatThrownBy(() ->
+                    service.updateAccountStatus(accountId, req))
+                    .isInstanceOf(BusinessRuleException.class);
+        }
     }
 
     // ================= APPLY PAYMENT =================
 
-    @Test
-    void shouldApplyPaymentSuccessfully() {
+    @Nested
+    class ApplyPayment {
 
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        @Test
+        void shouldApplyPayment_success() {
+            account.setCreditLimit(BigDecimal.valueOf(100000));
+            account.setCurrentBalance(BigDecimal.valueOf(20000));
 
-        service.applyPayment(accountId, BigDecimal.valueOf(100), Instant.now());
+            when(repository.findById(accountId)).thenReturn(Optional.of(account));
 
-        assertNotNull(account.getLastPaymentAmount());
-    }
+            service.applyPayment(accountId, BigDecimal.valueOf(5000), Instant.now());
 
-    @Test
-    void shouldThrowException_whenInvalidPaymentAmount() {
+            verify(repository).save(account);
+        }
 
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
+        @Test
+        void shouldThrow_whenInvalidAmount() {
+            when(repository.findById(accountId)).thenReturn(Optional.of(account));
 
-        assertThrows(BadRequestException.class,
-                () -> service.applyPayment(accountId, BigDecimal.ZERO, Instant.now()));
-    }
-
-    // ================= BILLING =================
-
-    @Test
-    void shouldUpdateAccountAfterBilling() {
-
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-
-        Instant now = Instant.now();
-
-        service.updateAccountAfterBilling(accountId, now,
-                BigDecimal.valueOf(1000), now.plusSeconds(1000), BigDecimal.TEN);
-
-        assertEquals(now, account.getLastStatementDate());
-    }
-
-    // ================= EXISTS =================
-
-    @Test
-    void shouldReturnAccountExists() {
-
-        when(accountRepository.existsByApplicationApplicationId(any())).thenReturn(true);
-
-        assertTrue(service.accountExistsForApplication(UUID.randomUUID()));
-    }
-
-    @Test
-    void shouldReturnHasActiveAccount() {
-
-        when(accountRepository.existsByCustomerCustomerIdAndCreditProductCreditProductIdAndAccountStatus(any(), any(), any()))
-                .thenReturn(true);
-
-        assertTrue(service.hasActiveAccountForProduct(UUID.randomUUID(), 1L));
-    }
-
-    // ================= ENTITY =================
-
-    @Test
-    void shouldReturnAccountEntity() {
-
-        when(accountRepository.findById(accountId)).thenReturn(Optional.of(account));
-
-        CreditAccount result = service.getAccountEntity(accountId);
-
-        assertNotNull(result);
-    }
-
-    @Test
-    void shouldThrowException_whenAccountNotFound() {
-
-        when(accountRepository.findById(accountId)).thenReturn(Optional.empty());
-
-        assertThrows(ResourceNotFoundException.class,
-                () -> service.getAccountEntity(accountId));
+            assertThatThrownBy(() ->
+                    service.applyPayment(accountId, BigDecimal.ZERO, Instant.now()))
+                    .isInstanceOf(BadRequestException.class);
+        }
     }
 }

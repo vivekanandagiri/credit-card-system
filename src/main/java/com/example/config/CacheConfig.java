@@ -33,7 +33,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
  *
  * <p><b>Note:</b>
  * This cache is in-memory and local to a single instance.
- * For distributed systems, use Redis or a shared cache.
+ * For distributed systems, we will use Redis or a shared cache.
  */
 @Configuration
 public class CacheConfig {
@@ -54,7 +54,7 @@ public class CacheConfig {
                 // Maximum number of entries
                 .maximumSize(100_000)
 
-                // Record stats for monitoring (optional but recommended)
+                // Record stats for monitoring 
                 .recordStats()
 
                 .build();

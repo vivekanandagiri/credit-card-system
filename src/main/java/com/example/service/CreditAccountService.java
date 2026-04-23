@@ -60,9 +60,9 @@ public interface CreditAccountService {
 	 *
 	 * @throws BusinessRuleException if the available balance is insufficient
 	 */
-	void deductBalance(UUID accountId, BigDecimal amount);
-
-	void addBalance(UUID accountId, BigDecimal amount);
+//	void deductBalance(UUID accountId, BigDecimal amount);
+//
+//	void addBalance(UUID accountId, BigDecimal amount);
 	void updateAccountAfterBilling(
 	        UUID accountId,
 	        Instant lastStatementDate,

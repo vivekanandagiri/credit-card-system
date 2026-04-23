@@ -28,6 +28,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -38,24 +39,24 @@ import java.util.stream.Collectors;
  * ensuring correct allocation across billing statements, updating account balances,
  * and maintaining a consistent financial ledger.</p>
  *
- * <p><b>Key Responsibilities:</b></p>
+ * <h3>Key Responsibilities</h3>
  * <ul>
  *     <li>Validate and process incoming payment requests</li>
- *     <li>Allocate payments to outstanding billing statements (oldest first)</li>
- *     <li>Handle partial payments and overpayments</li>
- *     <li>Update account balances and available credit</li>
+ *     <li>Allocate payments to unpaid statements (oldest first - FIFO)</li>
+ *     <li>Handle partial payments and over payments</li>
+ *     <li>Update account balances and credit availability</li>
  *     <li>Record transactions for audit and traceability</li>
  * </ul>
  *
- * <p><b>Financial Guarantees:</b></p>
+ * <h3>Financial Guarantees</h3>
  * <ul>
- *     <li>ACID-compliant transactions using {@code @Transactional}</li>
- *     <li>Deterministic payment allocation order (oldest statements first)</li>
- *     <li>Accurate monetary calculations using {@link java.math.BigDecimal}</li>
+ *     <li>ACID-compliant transactions via {@code @Transactional}</li>
+ *     <li>Deterministic allocation order (oldest statements first)</li>
+ *     <li>Precision-safe calculations using {@link BigDecimal}</li>
  * </ul>
  *
- * <p><b>Important:</b> This service is part of the financial ledger system.
- * Any modifications must ensure consistency, idempotency, and audit correctness.</p>
+ * <p><b>Important:</b> This is a critical financial component. Any modification
+ * must preserve consistency, idempotency, and audit correctness.</p>
  */
 @Service
 @RequiredArgsConstructor
@@ -72,56 +73,56 @@ public class PaymentServiceImpl implements PaymentService {
     private final PaymentMapper paymentMapper;
 
     /**
-     * Processes a payment against a credit account and updates all related financial records.
+     * Processes a payment for a credit account.
      *
-     * <p><b>Execution Flow:</b></p>
+     * <h3>Execution Flow</h3>
      * <ol>
-     *     <li>Validate request payload</li>
-     *     <li>Acquire account lock (for update)</li>
-     *     <li>Create and persist payment record</li>
-     *     <li>Allocate payment across unpaid statements (oldest first)</li>
-     *     <li>Update statement balances and statuses</li>
-     *     <li>Apply payment to account balance</li>
-     *     <li>Record transaction for audit trail</li>
+     *     <li>Validate request</li>
+     *     <li>Acquire account lock</li>
+     *     <li>Check idempotency via referenceId</li>
+     *     <li>Create and persist payment</li>
+     *     <li>Record ledger transaction</li>
+     *     <li>Allocate payment across statements (FIFO)</li>
+     *     <li>Update account balance</li>
+     *     <li>Handle overpayment (if any)</li>
      * </ol>
      *
-     * <p><b>Allocation Strategy:</b></p>
+     * <h3>Allocation Strategy</h3>
      * <ul>
-     *     <li>Payments are applied to the oldest unpaid statements first</li>
-     *     <li>Supports partial payments and multiple statement settlement</li>
-     *     <li>Stops allocation once payment amount is exhausted</li>
+     *     <li>Oldest unpaid statements are cleared first</li>
+     *     <li>Supports partial and multi-statement payments</li>
+     *     <li>Stops when payment amount is exhausted</li>
      * </ul>
      *
-     * <p><b>Overpayment Handling:</b></p>
+     * <h3>Over payment Handling</h3>
      * <ul>
-     *     <li>Any remaining amount after clearing all statements is treated as overpayment</li>
-     *     <li>Overpayment is applied to increase available credit on the account</li>
+     *     <li>Remaining amount (if any) increases available credit</li>
      * </ul>
      *
-     * <p><b>Consistency Guarantees:</b></p>
-     * <ul>
-     *     <li>Fully transactional — all updates succeed or fail together</li>
-     *     <li>Prevents partial updates to statements or account balances</li>
-     * </ul>
+     * @param accountId credit account ID
+     * @param request   payment request
+     * @return processed payment response
      *
-     * @param accountId the credit account receiving the payment
-     * @param request   the validated payment request payload
-     * @return payment response containing transaction details
-     *
-     * @throws BadRequestException if the request is invalid or violates business rules
+     * @throws BadRequestException if validation fails
      */
     @Override
     public PaymentResponse makePayment(UUID accountId, PaymentRequest request) {
 
         validateRequest(request);
 
-        
         CreditAccount account =
                 creditAccountService.getAccountForUpdate(accountId);
 
         BigDecimal paymentAmount = request.getAmount();
 
-        // 4. Create Payment
+        // 1.Idempotency
+        Optional<Payment> existing =
+                paymentRepository.findByReferenceId(request.getReferenceId());
+
+        if (existing.isPresent()) {
+            return paymentMapper.toResponse(existing.get());
+        }
+        // 2. Create Payment
         Payment payment = Payment.builder()
                 .account(account)
                 .amount(paymentAmount)
@@ -133,9 +134,10 @@ public class PaymentServiceImpl implements PaymentService {
 
         
         paymentRepository.save(payment);
-        
+        // 3. RECORD TRANSACTION (→ LEDGER FIRST)
+        transactionService.recordPayment(account, payment);
 
-        // 5. Balance BEFORE
+        // 5. ALLOCATE TO STATEMENTS (FIFO)
         BigDecimal remainingPayment = paymentAmount;
         
         List<BillingStatement> unpaidStatements =
@@ -155,15 +157,17 @@ public class PaymentServiceImpl implements PaymentService {
 
             BigDecimal allocation = remainingPayment.min(stmtRemaining);
 
+            //update paid amount
             statement.setAmountPaid(
                     defaultZero(statement.getAmountPaid()).add(allocation)
             );
 
+            //update remaining amount
             statement.setRemainingAmount(
                     stmtRemaining.subtract(allocation)
             );
 
-            // immediate full-paid -Status Change
+            // immediate full-paid-Status Change
             if (statement.getRemainingAmount().compareTo(BigDecimal.ZERO) == 0 &&
             	    statement.getStatementStatus() != StatementStatus.OVERDUE) {
 
@@ -172,6 +176,7 @@ public class PaymentServiceImpl implements PaymentService {
 
             billingService.save(statement);
 
+            //allocation record
             allocationRepository.save(
                     PaymentAllocation.builder()
                             .payment(payment)
@@ -182,28 +187,18 @@ public class PaymentServiceImpl implements PaymentService {
 
             remainingPayment = remainingPayment.subtract(allocation);
         }
-
-        BigDecimal before = defaultZero(account.getAvailableBalance());
-        
-
-        // 6. Update account (FULL payment including overpayment)
+        // 6. UPDATE ACCOUNT (AFTER LEDGER + ALLOCATION)
         creditAccountService.applyPayment(
                 accountId,
                 paymentAmount,
                 payment.getPaidAt()
         );
 
-        BigDecimal after = creditAccountService
-                .getAccount(accountId)
-                .getAvailableBalance();
-
-        // 7. Record transaction 
-        transactionService.recordPayment(
-                account,
-                payment,
-                before,
-                after
-        );
+        // 6. HANDLE OVERPAYMENT
+        if (remainingPayment.compareTo(BigDecimal.ZERO) > 0) {
+            log.info("Overpayment detected | accountId={} | amount={}",
+                    accountId, remainingPayment);
+        }
 
         log.info("""
                 Payment processed
@@ -224,22 +219,12 @@ public class PaymentServiceImpl implements PaymentService {
 
 
     /**
-     * Retrieves a paginated list of payments for a specific account.
+     * Retrieves paginated payments for an account.
      *
-     * <p>This method ensures efficient data retrieval by enforcing pagination,
-     * preventing excessive memory usage when handling large payment histories.</p>
-     *
-     * <p><b>Details:</b></p>
-     * <ul>
-     *     <li>Fetches payments using page-based queries</li>
-     *     <li>Loads associated allocation details for each payment</li>
-     *     <li>Maps entities to response DTOs</li>
-     * </ul>
-     *
-     * @param accountId the account identifier
-     * @param page      zero-based page index
-     * @param size      number of records per page
-     * @return paginated list of payment responses
+     * @param accountId account ID
+     * @param page      page index (0-based)
+     * @param size      page size
+     * @return paginated payment responses
      */
     @Override
     @Transactional(readOnly = true)
@@ -282,22 +267,11 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     /**
-     * Retrieves a specific payment for an account with strict ownership validation.
+     * Retrieves a payment by ID with strict ownership validation.
      *
-     * <p>This method ensures that the requested payment belongs to the given account,
-     * preventing unauthorized access to financial data.</p>
-     *
-     * <p><b>Security:</b></p>
-     * <ul>
-     *     <li>Validates both paymentId and accountId</li>
-     *     <li>Prevents cross-account data access</li>
-     * </ul>
-     *
-     * @param accountId the account identifier
-     * @param paymentId the payment identifier
-     * @return payment details
-     *
-     * @throws ResourceNotFoundException if payment is not found or does not belong to account
+     * @param accountId account ID
+     * @param paymentId payment ID
+     * @return payment response
      */
     @Override
     @Transactional(readOnly = true)
@@ -320,15 +294,37 @@ public class PaymentServiceImpl implements PaymentService {
         return paymentMapper.toResponse(payment);
     }
 
+
     /**
-     * Validates the structure and basic integrity of a payment request.
+     * Retrieves payment by reference ID (idempotency lookup).
+     *
+     * @param referenceId unique reference ID
+     * @return payment response
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public PaymentResponse getByReferenceId(String referenceId) {
+
+        Payment payment = paymentRepository
+                .findByReferenceId(referenceId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Payment not found for referenceId: " + referenceId
+                        )
+                );
+
+        return paymentMapper.toResponse(payment);
+    }
+
+    /**
+     * Validates payment request input.
      *
      * <p>This method performs fail-fast validation before any database interaction,
      * ensuring invalid requests are rejected early to conserve system resources.</p>
      *
      * <p><b>Validations:</b></p>
      * <ul>
-     *     <li>Amount must be non-null and greater than zero</li>
+     *     <li>The Amount must be non-null and greater than zero</li>
      *     <li>Payment method must be provided</li>
      *     <li>Reference ID must be provided</li>
      * </ul>
@@ -351,6 +347,7 @@ public class PaymentServiceImpl implements PaymentService {
             throw new BadRequestException("ReferenceId is required");
         }
     }
+
     /**
      * Returns {@link BigDecimal#ZERO} if the given value is null.
      *
@@ -362,21 +359,5 @@ public class PaymentServiceImpl implements PaymentService {
      */
     private BigDecimal defaultZero(BigDecimal val) {
         return val == null ? BigDecimal.ZERO : val;
-    }
-
-
-    @Override
-    @Transactional(readOnly = true)
-    public PaymentResponse getByReferenceId(String referenceId) {
-
-        Payment payment = paymentRepository
-                .findByReferenceId(referenceId)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Payment not found for referenceId: " + referenceId
-                        )
-                );
-
-        return paymentMapper.toResponse(payment);
     }
 }

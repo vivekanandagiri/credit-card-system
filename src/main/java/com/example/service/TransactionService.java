@@ -10,6 +10,7 @@ import com.example.enums.TransactionType;
 import org.springframework.data.domain.Page;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.UUID;
 
 public interface TransactionService {
@@ -42,9 +43,7 @@ public interface TransactionService {
 	//make bill payment 
 	TransactionSummaryResponse recordPayment(
 		    CreditAccount account,
-		    Payment payment,
-		    BigDecimal balanceBefore,
-		    BigDecimal balanceAfter
+		    Payment payment
 		);
 	
 	TransactionSummaryResponse getByTransactionReference(String transactionReference);
@@ -55,6 +54,6 @@ public interface TransactionService {
 	        TransactionType type,
 	        BigDecimal amount,
 	        String description,
-	        String reference);
+	        String reference,Instant createdAt);
 
 }

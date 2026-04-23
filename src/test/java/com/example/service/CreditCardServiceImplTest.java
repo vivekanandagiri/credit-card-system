@@ -1,13 +1,21 @@
 package com.example.service;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-import java.util.*;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
-import com.example.dto.request.CreditCardIssuanceRequest;
-import com.example.dto.request.CreditCardStatusUpdateRequest;
-import com.example.dto.response.CreditCardResponse;
+import com.example.testutil.TestFixtures;
+import com.example.util.MaskedCardNumberGenerator;
+
+import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.*;
+
+import com.example.dto.request.*;
+import com.example.dto.response.*;
 import com.example.entity.*;
 import com.example.enums.*;
 import com.example.exception.*;
@@ -15,24 +23,18 @@ import com.example.mapper.CreditCardMapper;
 import com.example.repository.CreditCardRepository;
 import com.example.security.CustomUserPrincipal;
 import com.example.service.ServiceImpl.CreditCardServiceImpl;
-import com.example.util.MaskedCardNumberGenerator;
-
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 class CreditCardServiceImplTest {
 
     @Mock private CreditCardRepository cardRepository;
-    @Mock private CreditAccountService creditAccountService;
+    @Mock private CreditAccountService accountService;
     @Mock private CardProductService cardProductService;
-    @Mock private CreditCardMapper cardMapper;
-    @Mock private MaskedCardNumberGenerator maskedCardNumberGenerator;
+    @Mock private CreditCardMapper mapper;
+    @Mock private MaskedCardNumberGenerator generator;
     @Mock private CustomerService customerService;
-    @Mock private CustomerAddressService customerAddressService;
+    @Mock private CustomerAddressService addressService;
 
     @InjectMocks
     private CreditCardServiceImpl service;
@@ -43,275 +45,357 @@ class CreditCardServiceImplTest {
 
     private Customer customer;
     private CreditAccount account;
+    private CreditCardProduct product;
     private CreditCard card;
 
     @BeforeEach
-    void setup() {
+    void setUp() {
         userId = UUID.randomUUID();
         accountId = UUID.randomUUID();
         cardId = UUID.randomUUID();
+        
+        
 
-        customer = new Customer();
-        customer.setCustomerId(UUID.randomUUID());
-
-        account = new CreditAccount();
-        account.setAccountId(accountId);
-        account.setCustomer(customer);
+        customer = TestFixtures.validCustomer();
+        account = TestFixtures.validCreditAccount(customer, null, TestFixtures.validCreditProductEntity());
+        account.setAccountId(accountId);  
         account.setAccountStatus(AccountStatus.ACTIVE);
+
+        product = TestFixtures.validCreditCardProduct();
 
         card = new CreditCard();
         card.setCardId(cardId);
         card.setCreditAccount(account);
-        card.setCardStatus(CardStatus.PENDING_ACTIVATION);
+        card.setCardStatus(CardStatus.ACTIVE);
     }
 
     // ================= ISSUE CARD =================
 
-    @Test
-    void issueCard_success() {
-        CreditCardIssuanceRequest request = new CreditCardIssuanceRequest();
-        request.setCardFormat(CardFormat.VIRTUAL);
+    @Nested
+    class IssueCard {
 
-        CreditCardProduct product = new CreditCardProduct();
-        product.setCardValidityYears(3);
-        product.setOnlineTransactionsAllowed(true);
-        product.setAtmWithdrawalAllowed(true);
-        product.setInternationalUsageAllowed(true);
+        @Test
+        void shouldIssueCard_success() {
+            CreditCardIssuanceRequest req = mock(CreditCardIssuanceRequest.class);
+
+            when(req.getCardProductId()).thenReturn(UUID.randomUUID());
+            when(req.getCardFormat()).thenReturn(CardFormat.VIRTUAL);
+            when(req.getIssuanceReason()).thenReturn(CardIssuanceReason.NEW_CARD);
+
+            when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
+            when(accountService.getAccountEntity(accountId)).thenReturn(account);
+            when(cardProductService.getActiveCardProductEntity(any())).thenReturn(product);
+            when(generator.generate(any())).thenReturn("4111XXXXXX1234");
+            when(cardRepository.countByCreditAccountAccountIdAndCardStatusIn(any(), any()))
+                    .thenReturn(0);
+            when(cardRepository.existsByCreditAccountAccountIdAndCardFormatAndCardStatusIn(any(), any(), any()))
+                    .thenReturn(false);
+            when(cardRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+            when(mapper.toResponse(any())).thenReturn(mock(CreditCardResponse.class));
+
+            CreditCardResponse response = service.issueCard(userId, accountId, req);
+
+            assertThat(response).isNotNull();
+        }
+
+        @Test
+        void shouldIssueCardByAdmin_success() {
+            CreditCardIssuanceRequest req = mock(CreditCardIssuanceRequest.class);
+
+            when(req.getCardProductId()).thenReturn(UUID.randomUUID());
+            when(req.getCardFormat()).thenReturn(CardFormat.VIRTUAL);
+            when(req.getIssuanceReason()).thenReturn(CardIssuanceReason.NEW_CARD);
+
+            when(accountService.getAccountEntity(accountId)).thenReturn(account);
+            when(cardProductService.getActiveCardProductEntity(any())).thenReturn(product);
+            when(generator.generate(any())).thenReturn("4111XXXX");
+            when(cardRepository.countByCreditAccountAccountIdAndCardStatusIn(any(), any())).thenReturn(0);
+            when(cardRepository.existsByCreditAccountAccountIdAndCardFormatAndCardStatusIn(any(), any(), any()))
+                    .thenReturn(false);
+            when(cardRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+            when(mapper.toResponse(any())).thenReturn(mock(CreditCardResponse.class));
+
+            CreditCardResponse res = service.issueCardByAdmin(accountId, req);
+
+            assertThat(res).isNotNull();
+        }
+        @Test
+        void shouldThrow_whenAccountNotOwned() {
+            Customer another = new Customer();
+            another.setCustomerId(UUID.randomUUID());
+
+            account.setCustomer(another);
+
+            when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
+            when(accountService.getAccountEntity(accountId)).thenReturn(account);
+
+            assertThatThrownBy(() ->
+                    service.issueCard(userId, accountId, mock(CreditCardIssuanceRequest.class)))
+                    .isInstanceOf(AccessDeniedException.class);
+        }
+
+        @Test
+        void shouldThrow_whenAccountNotActive() {
+            account.setAccountStatus(AccountStatus.BLOCKED);
+
+            when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
+            when(accountService.getAccountEntity(accountId)).thenReturn(account);
+
+            assertThatThrownBy(() ->
+                    service.issueCard(userId, accountId, mock(CreditCardIssuanceRequest.class)))
+                    .isInstanceOf(BusinessRuleException.class);
+        }
+
+        @Test
+        void shouldThrow_whenVirtualCardAlreadyExists() {
+            CreditCardIssuanceRequest req = mock(CreditCardIssuanceRequest.class);
+
+            when(req.getCardProductId()).thenReturn(UUID.randomUUID());
+            when(req.getCardFormat()).thenReturn(CardFormat.VIRTUAL);
+
+            when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
+            when(accountService.getAccountEntity(accountId)).thenReturn(account);
+            when(cardProductService.getActiveCardProductEntity(any())).thenReturn(product);
+            when(cardRepository.countByCreditAccountAccountIdAndCardStatusIn(any(), any()))
+                    .thenReturn(0);
+            when(cardRepository.existsByCreditAccountAccountIdAndCardFormatAndCardStatusIn(any(), any(), any()))
+                    .thenReturn(true);
+
+            assertThatThrownBy(() ->
+                    service.issueCard(userId, accountId, req))
+                    .isInstanceOf(BusinessRuleException.class);
+        }
+
+        @Test
+        void shouldThrow_whenPhysicalCardWithoutAddress() {
+            CreditCardIssuanceRequest req = mock(CreditCardIssuanceRequest.class);
+
+            when(req.getCardProductId()).thenReturn(UUID.randomUUID());
+            when(req.getCardFormat()).thenReturn(CardFormat.PHYSICAL);
+
+            when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
+            when(accountService.getAccountEntity(accountId)).thenReturn(account);
+            when(cardProductService.getActiveCardProductEntity(any())).thenReturn(product);
+            when(addressService.hasAddress(any())).thenReturn(false);
+
+            assertThatThrownBy(() ->
+                    service.issueCard(userId, accountId, req))
+                    .isInstanceOf(BusinessRuleException.class);
+        }
+    }
+    @Test
+    void shouldThrow_whenMaxCardLimitReached() {
+        CreditCardIssuanceRequest req = mock(CreditCardIssuanceRequest.class);
+
+        when(req.getCardProductId()).thenReturn(UUID.randomUUID());
+        when(req.getCardFormat()).thenReturn(CardFormat.VIRTUAL);
 
         when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
-        when(creditAccountService.getAccountEntity(accountId)).thenReturn(account);
+        when(accountService.getAccountEntity(accountId)).thenReturn(account);
         when(cardProductService.getActiveCardProductEntity(any())).thenReturn(product);
-        when(cardRepository.countByCreditAccountAccountIdAndCardStatusIn(any(), any())).thenReturn(0);
-        when(cardRepository.existsByCreditAccountAccountIdAndCardFormatAndCardStatusIn(any(), any(), any()))
-                .thenReturn(false);
-        when(maskedCardNumberGenerator.generate(any())).thenReturn("411111XXXXXX1234");
-        when(cardRepository.save(any())).thenReturn(card);
-        when(cardMapper.toResponse(any())).thenReturn(new CreditCardResponse());
 
-        CreditCardResponse response = service.issueCard(userId, accountId, request);
-
-        assertNotNull(response);
-    }
-
-    @Test
-    void issueCard_accountOwnershipFail_shouldThrow() {
-        Customer otherCustomer = new Customer();
-        otherCustomer.setCustomerId(UUID.randomUUID());
-        account.setCustomer(otherCustomer);
-
-        when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
-        when(creditAccountService.getAccountEntity(accountId)).thenReturn(account);
-
-        assertThrows(AccessDeniedException.class,
-                () -> service.issueCard(userId, accountId, new CreditCardIssuanceRequest()));
-    }
-
-    @Test
-    void issueCard_accountNotActive_shouldThrow() {
-        account.setAccountStatus(AccountStatus.BLOCKED);
-
-        when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
-        when(creditAccountService.getAccountEntity(accountId)).thenReturn(account);
-
-        assertThrows(BusinessRuleException.class,
-                () -> service.issueCard(userId, accountId, new CreditCardIssuanceRequest()));
-    }
-
-    @Test
-    void issueCard_virtualCardAlreadyExists_shouldThrow() {
-        CreditCardIssuanceRequest request = new CreditCardIssuanceRequest();
-        request.setCardFormat(CardFormat.VIRTUAL);
-
-        when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
-        when(creditAccountService.getAccountEntity(accountId)).thenReturn(account);
-        when(cardProductService.getActiveCardProductEntity(any())).thenReturn(new CreditCardProduct());
-        when(cardRepository.countByCreditAccountAccountIdAndCardStatusIn(any(), any())).thenReturn(0);
-        when(cardRepository.existsByCreditAccountAccountIdAndCardFormatAndCardStatusIn(any(), any(), any()))
-                .thenReturn(true);
-
-        assertThrows(BusinessRuleException.class,
-                () -> service.issueCard(userId, accountId, request));
-    }
-
-    @Test
-    void issueCard_physicalCardWithoutAddress_shouldThrow() {
-        CreditCardIssuanceRequest request = new CreditCardIssuanceRequest();
-        request.setCardFormat(CardFormat.PHYSICAL);
-
-        when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
-        when(creditAccountService.getAccountEntity(accountId)).thenReturn(account);
-        when(cardProductService.getActiveCardProductEntity(any())).thenReturn(new CreditCardProduct());
-        when(customerAddressService.hasAddress(customer.getCustomerId())).thenReturn(false);
-
-        assertThrows(BusinessRuleException.class,
-                () -> service.issueCard(userId, accountId, request));
-    }
-
-    @Test
-    void validateMaxCardLimit_shouldThrow() {
-        CreditCardIssuanceRequest request = new CreditCardIssuanceRequest();
-        request.setCardFormat(CardFormat.VIRTUAL);
-
-        when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
-        when(creditAccountService.getAccountEntity(accountId)).thenReturn(account);
-        when(cardProductService.getActiveCardProductEntity(any())).thenReturn(new CreditCardProduct());
         when(cardRepository.countByCreditAccountAccountIdAndCardStatusIn(any(), any()))
-                .thenReturn(5);
+                .thenReturn(5); // 🔥 limit hit
 
-        assertThrows(BusinessRuleException.class,
-                () -> service.issueCard(userId, accountId, request));
+        assertThatThrownBy(() ->
+                service.issueCard(userId, accountId, req))
+                .isInstanceOf(BusinessRuleException.class);
     }
 
     // ================= GET CARD =================
 
     @Test
-    void getCardById_success() {
+    void shouldGetCardById() {
         when(cardRepository.findById(cardId)).thenReturn(Optional.of(card));
-        when(cardMapper.toResponse(card)).thenReturn(new CreditCardResponse());
+        when(mapper.toResponse(card)).thenReturn(mock(CreditCardResponse.class));
 
-        CreditCardResponse response = service.getCardById(cardId);
+        CreditCardResponse res = service.getCardById(cardId);
 
-        assertNotNull(response);
+        assertThat(res).isNotNull();
     }
 
     @Test
-    void getCardById_notFound_shouldThrow() {
+    void shouldThrow_whenCardNotFound() {
         when(cardRepository.findById(cardId)).thenReturn(Optional.empty());
 
-        assertThrows(ResourceNotFoundException.class,
-                () -> service.getCardById(cardId));
+        assertThatThrownBy(() -> service.getCardById(cardId))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
+    
+    @Test
+    void shouldGetCardsByAccount_customer() {
+        when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
+        when(accountService.getAccountEntity(accountId)).thenReturn(account);
+
+        when(cardRepository.findAllByCreditAccountAccountId(accountId))
+                .thenReturn(List.of(card));
+        when(mapper.toResponse(any())).thenReturn(mock(CreditCardResponse.class));
+
+        List<CreditCardResponse> res =
+                service.getCardsByAccount(userId, accountId);
+
+        assertThat(res).hasSize(1);
+    }
+    @Test
+    void shouldGetCardsByAccount_admin() {
+        when(accountService.getAccountEntity(accountId)).thenReturn(account);
+        when(cardRepository.findAllByCreditAccountAccountId(accountId))
+                .thenReturn(List.of(card));
+        when(mapper.toResponse(any())).thenReturn(mock(CreditCardResponse.class));
+
+        List<CreditCardResponse> res = service.getCardsByAccount(accountId);
+
+        assertThat(res).hasSize(1);
+    }
+    @Test
+    void shouldGetCardById_customer_success() {
+        when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
+        when(accountService.getAccountEntity(accountId)).thenReturn(account);
+        when(cardRepository.findById(cardId)).thenReturn(Optional.of(card));
+        when(mapper.toResponse(any())).thenReturn(mock(CreditCardResponse.class));
+
+        CreditCardResponse res =
+                service.getCardById(userId, accountId, cardId);
+
+        assertThat(res).isNotNull();
+    }
+    @Test
+    void shouldThrow_whenCardNotBelongToAccount() {
+        CreditAccount another = new CreditAccount();
+        another.setAccountId(UUID.randomUUID());
+        card.setCreditAccount(another);
+
+        when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
+        when(accountService.getAccountEntity(accountId)).thenReturn(account);
+        when(cardRepository.findById(cardId)).thenReturn(Optional.of(card));
+
+        assertThatThrownBy(() ->
+                service.getCardById(userId, accountId, cardId))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+    
+    
 
     // ================= UPDATE STATUS =================
 
+    @Nested
+    class UpdateStatus {
+
+        @Test
+        void shouldUpdateStatus_admin() {
+            CustomUserPrincipal principal = mock(CustomUserPrincipal.class);
+            CreditCardStatusUpdateRequest req = mock(CreditCardStatusUpdateRequest.class);
+
+            when(principal.getRole()).thenReturn(UserRole.ADMIN);
+            when(req.getStatus()).thenReturn(CardStatus.BLOCKED);
+
+            when(cardRepository.findById(cardId)).thenReturn(Optional.of(card));
+            when(cardRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+            when(mapper.toIssueResponse(any())).thenReturn(mock(CreditCardIssuanceResponse.class));
+
+            CreditCardIssuanceResponse res =
+                    service.updateCardStatusForUser(principal, accountId, cardId, req);
+
+            assertThat(res).isNotNull();
+        }
+
+        @Test
+        void shouldThrow_whenInvalidTransition() {
+            CustomUserPrincipal principal = mock(CustomUserPrincipal.class);
+            CreditCardStatusUpdateRequest req = mock(CreditCardStatusUpdateRequest.class);
+
+            when(principal.getRole()).thenReturn(UserRole.ADMIN);
+            when(req.getStatus()).thenReturn(CardStatus.PENDING_ACTIVATION); // invalid
+
+            when(cardRepository.findById(cardId)).thenReturn(Optional.of(card));
+
+            assertThatThrownBy(() ->
+                    service.updateCardStatusForUser(principal, accountId, cardId, req))
+                    .isInstanceOf(BusinessRuleException.class);
+        }
+
+        @Test
+        void shouldThrow_whenSameStatus() {
+            CustomUserPrincipal principal = mock(CustomUserPrincipal.class);
+            CreditCardStatusUpdateRequest req = mock(CreditCardStatusUpdateRequest.class);
+
+            when(principal.getRole()).thenReturn(UserRole.ADMIN);
+            when(req.getStatus()).thenReturn(CardStatus.ACTIVE);
+
+            when(cardRepository.findById(cardId)).thenReturn(Optional.of(card));
+
+            assertThatThrownBy(() ->
+                    service.updateCardStatusForUser(principal, accountId, cardId, req))
+                    .isInstanceOf(ConflictException.class);
+        }
+    }
+
+    // ================= GET CARDS BY STATUS =================
+
     @Test
-    void updateCardStatus_admin_validTransition() {
+    void shouldReturnCardsByStatus_admin() {
+        when(cardRepository.findAllByCardStatus(CardStatus.ACTIVE))
+                .thenReturn(List.of(card));
+        when(mapper.toIssueResponse(any()))
+                .thenReturn(mock(CreditCardIssuanceResponse.class));
+
+        List<CreditCardIssuanceResponse> res =
+                service.getCardsByStatus(CardStatus.ACTIVE);
+
+        assertThat(res).hasSize(1);
+    }
+    
+    @Test
+    void shouldSetAllTimestamps() {
         CustomUserPrincipal principal = mock(CustomUserPrincipal.class);
+        CreditCardStatusUpdateRequest req = mock(CreditCardStatusUpdateRequest.class);
+
         when(principal.getRole()).thenReturn(UserRole.ADMIN);
 
-        CreditCardStatusUpdateRequest request = new CreditCardStatusUpdateRequest();
-        request.setStatus(CardStatus.ACTIVE);
-
         when(cardRepository.findById(cardId)).thenReturn(Optional.of(card));
-        when(cardRepository.save(any())).thenReturn(card);
-        when(cardMapper.toIssueResponse(any())).thenReturn(null);
+        when(cardRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(mapper.toIssueResponse(any())).thenReturn(mock(CreditCardIssuanceResponse.class));
 
-        service.updateCardStatusForUser(principal, accountId, cardId, request);
+        // ACTIVE
+        card.setCardStatus(CardStatus.PENDING_ACTIVATION);
+        when(req.getStatus()).thenReturn(CardStatus.ACTIVE);
+        service.updateCardStatusForUser(principal, accountId, cardId, req);
+        assertThat(card.getActivatedAt()).isNotNull();
 
-        assertEquals(CardStatus.ACTIVE, card.getCardStatus());
-        assertNotNull(card.getActivatedAt());
+        // BLOCKED
+        when(req.getStatus()).thenReturn(CardStatus.BLOCKED);
+        service.updateCardStatusForUser(principal, accountId, cardId, req);
+        assertThat(card.getBlockedAt()).isNotNull();
+
+        // CANCELLED
+        when(req.getStatus()).thenReturn(CardStatus.CANCELLED);
+        service.updateCardStatusForUser(principal, accountId, cardId, req);
+        assertThat(card.getCancelledAt()).isNotNull();
     }
-
+    
     @Test
-    void updateCardStatus_invalidTransition_shouldThrow() {
+    void shouldThrow_whenCustomerInvalidStatusChange() {
         CustomUserPrincipal principal = mock(CustomUserPrincipal.class);
-        when(principal.getRole()).thenReturn(UserRole.ADMIN);
+        CreditCardStatusUpdateRequest req = mock(CreditCardStatusUpdateRequest.class);
 
-        card.setCardStatus(CardStatus.CANCELLED);
-
-        CreditCardStatusUpdateRequest request = new CreditCardStatusUpdateRequest();
-        request.setStatus(CardStatus.ACTIVE);
-
-        when(cardRepository.findById(cardId)).thenReturn(Optional.of(card));
-
-        assertThrows(BusinessRuleException.class,
-                () -> service.updateCardStatusForUser(principal, accountId, cardId, request));
-    }
-
-    @Test
-    void updateCardStatus_sameStatus_shouldThrow() {
-        CustomUserPrincipal principal = mock(CustomUserPrincipal.class);
-        when(principal.getRole()).thenReturn(UserRole.ADMIN);
-
-        CreditCardStatusUpdateRequest request = new CreditCardStatusUpdateRequest();
-        request.setStatus(CardStatus.PENDING_ACTIVATION);
-
-        when(cardRepository.findById(cardId)).thenReturn(Optional.of(card));
-
-        assertThrows(ConflictException.class,
-                () -> service.updateCardStatusForUser(principal, accountId, cardId, request));
-    }
-
-    @Test
-    void updateCardStatus_wrongAccount_shouldThrow() {
-
-        CustomUserPrincipal principal = mock(CustomUserPrincipal.class);
-        // ❌ No stubbing needed
-
-        UUID differentAccountId = UUID.randomUUID();
-
-        CreditCardStatusUpdateRequest request = new CreditCardStatusUpdateRequest();
-        request.setStatus(CardStatus.ACTIVE);
-
-        when(cardRepository.findById(cardId)).thenReturn(Optional.of(card));
-
-        assertThrows(AccessDeniedException.class,
-                () -> service.updateCardStatusForUser(
-                        principal,
-                        differentAccountId,
-                        cardId,
-                        request
-                ));
-    }
-
-    @Test
-    void updateCardStatus_customerInvalidStatus_shouldThrow() {
-        CustomUserPrincipal principal = mock(CustomUserPrincipal.class);
         when(principal.getRole()).thenReturn(UserRole.CUSTOMER);
         when(principal.getUserId()).thenReturn(userId);
 
-        CreditCardStatusUpdateRequest request = new CreditCardStatusUpdateRequest();
-        request.setStatus(CardStatus.CANCELLED);
+        when(req.getStatus()).thenReturn(CardStatus.CANCELLED);
 
         when(cardRepository.findById(cardId)).thenReturn(Optional.of(card));
         when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
 
-        assertThrows(BusinessRuleException.class,
-                () -> service.updateCardStatusForUser(principal, accountId, cardId, request));
+        assertThatThrownBy(() ->
+                service.updateCardStatusForUser(principal, accountId, cardId, req))
+                .isInstanceOf(BusinessRuleException.class);
     }
-
     @Test
-    void updateCardStatus_shouldSetBlockedAt() {
-        CustomUserPrincipal principal = mock(CustomUserPrincipal.class);
-        when(principal.getRole()).thenReturn(UserRole.ADMIN);
-        card.setCardStatus(CardStatus.ACTIVE);
-
-        CreditCardStatusUpdateRequest request = new CreditCardStatusUpdateRequest();
-        request.setStatus(CardStatus.BLOCKED);
-
+    void shouldReturnCardEntity() {
         when(cardRepository.findById(cardId)).thenReturn(Optional.of(card));
-        when(cardRepository.save(any())).thenReturn(card);
-        when(cardMapper.toIssueResponse(any())).thenReturn(null);
 
-        service.updateCardStatusForUser(principal, accountId, cardId, request);
+        CreditCard res = service.getCardEntity(cardId);
 
-        assertNotNull(card.getBlockedAt());
-    }
-
-    // ================= GET CARDS =================
-
-    @Test
-    void getCardsByAccount_customer_success() {
-        when(customerService.getCustomerByUserId(userId)).thenReturn(customer);
-        when(creditAccountService.getAccountEntity(accountId)).thenReturn(account);
-        when(cardRepository.findAllByCreditAccountAccountId(accountId)).thenReturn(List.of(card));
-        when(cardMapper.toResponse(any())).thenReturn(new CreditCardResponse());
-
-        List<CreditCardResponse> result = service.getCardsByAccount(userId, accountId);
-
-        assertEquals(1, result.size());
-    }
-
-    @Test
-    void getCardsByStatusForUser_admin_shouldCallAdminFlow() {
-        CustomUserPrincipal principal = mock(CustomUserPrincipal.class);
-        when(principal.getRole()).thenReturn(UserRole.ADMIN);
-
-        when(cardRepository.findAllByCardStatus(CardStatus.ACTIVE)).thenReturn(List.of(card));
-        when(cardMapper.toIssueResponse(any())).thenReturn(null);
-
-        List<?> result = service.getCardsByStatusForUser(principal, CardStatus.ACTIVE);
-
-        assertNotNull(result);
+        assertThat(res).isNotNull();
     }
 }

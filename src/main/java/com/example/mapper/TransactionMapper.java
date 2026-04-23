@@ -12,8 +12,8 @@ public class TransactionMapper {
 
         return TransactionDetailResponse.builder()
                 .transactionId(txn.getTransactionId())
-                .referenceNumber(txn.getReferenceNumber())
-                .transactionReference(txn.getTransactionReference())
+                .internalReference(txn.getInternalReference())
+                //.transactionReference(txn.getNetworkReference())
                 .cardId(txn.getCard().getCardId())
                 .maskedCardNumber(txn.getCard().getMaskedCardNumber())
                 .cardFormat(txn.getCard().getCardFormat().name())
@@ -26,8 +26,6 @@ public class TransactionMapper {
                 .merchantName(txn.getMerchantName())
                 .merchantCategoryCode(txn.getMerchantCategoryCode())
                 .merchantCategoryName(txn.getMerchantCategoryName())
-                .balanceBefore(txn.getBalanceBefore())
-                .balanceAfter(txn.getBalanceAfter())
                 .declineReason(txn.getDeclineReason())
                 .transactionTime(txn.getTransactionTime())
                 .build();
@@ -37,7 +35,7 @@ public class TransactionMapper {
 
         return TransactionSummaryResponse.builder()
                 .transactionId(txn.getTransactionId())
-                .referenceNumber(txn.getReferenceNumber())
+                .referenceNumber(txn.getInternalReference())
                 .transactionStatus(txn.getTransactionStatus())
                 .transactionType(txn.getTransactionType())
                 .amount(txn.getAmount())

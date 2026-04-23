@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.transaction.Transactional;
+import lombok.RequiredArgsConstructor;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -26,35 +27,57 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Implementation of {@link KycService}.
+ * Implementation of {@link KycService} responsible for managing
+ * KYC (Know Your Customer) life-cycle.
  *
- * <p><strong>Domain ownership:</strong> KycService owns {@code KycRepository}.
- * Customer lookups go through {@link CustomerService} — not the customer repository directly.
+ * <p><b>Responsibilities:</b></p>
+ * <ul>
+ *     <li>Submit and re-submit KYC documents</li>
+ *     <li>Handle admin verification decisions</li>
+ *     <li>Maintain KYC audit trail</li>
+ * </ul>
+ *
+ * <p><b>KYC Life-cycle:</b></p>
+ * <ul>
+ *     <li>SUBMITTED → Under review</li>
+ *     <li>VERIFIED → Approved</li>
+ *     <li>REJECTED → Failed with reason</li>
+ *     <li>RESUBMIT_REQUIRED → Needs correction</li>
+ * </ul>
+ *
+ * <p><b>Design Notes:</b></p>
+ * <ul>
+ *     <li>KYC records are versioned (only one active at a time)</li>
+ *     <li>Previous records are deactivated on new submission</li>
+ *     <li>Customer lookup is delegated to {@link CustomerService}</li>
+ * </ul>
  */
 @Service
 @Transactional
+@RequiredArgsConstructor
 public class KycServiceImpl implements KycService {
 
     private final KycRepository kycRepository;
     private final CustomerService customerService;
     private final KycMapper kycMapper;
 
-    public KycServiceImpl(KycRepository kycRepository,
-                          CustomerService customerService, KycMapper kycMapper) {
-        this.kycRepository = kycRepository;
-        this.customerService = customerService;
-		this.kycMapper = kycMapper;
-    }
-
-
     /**
-     * Submits or re-submits a KYC document.
-     * Deactivates any previous records before saving the new one.
+     * Uploads or re-submits a KYC document.
      *
-     * @throws BusinessRuleException if the existing KYC is SUBMITTED or VERIFIED
+     * <p>Rules:</p>
+     * <ul>
+     *     <li>Cannot submit if existing KYC is SUBMITTED or VERIFIED</li>
+     *     <li>Previous KYC records are deactivated</li>
+     * </ul>
+     *
+     * @param customerId     customer ID
+     * @param documentType   document type (PAN, Aadhaar, etc.)
+     * @param documentNumber document number
+     * @param file           uploaded document
+     * @return current KYC status
      */
     @Override
-    @Transactional // Explicit write transaction
+    @Transactional 
     public String uploadKyc(UUID customerId, String documentType, String documentNumber, MultipartFile file) {
 
         Customer customer = customerService.getCustomer(customerId);
@@ -71,9 +94,18 @@ public class KycServiceImpl implements KycService {
     }
 
     /**
-     * (Admin) Updates the status of a KYC record.
+     * Admin action to update KYC status.
      *
-     * @throws BusinessRuleException if the KYC is already finalized or rejection reason is missing
+     * <p>Rules:</p>
+     * <ul>
+     *     <li>Cannot update VERIFIED or REJECTED records</li>
+     *     <li>Rejection must include a reason</li>
+     * </ul>
+     *
+     * @param kycId   KYC record ID
+     * @param adminId admin performing action
+     * @param request update payload
+     * @return updated KYC status
      */
     @Override
     @Transactional // Explicit write transaction
@@ -92,8 +124,6 @@ public class KycServiceImpl implements KycService {
         }
 
         applyKycDecision(kyc, request, adminId);
-        
-        applyKycDecision(kyc, request, adminId);
 
         kycRepository.save(kyc);
 
@@ -101,7 +131,9 @@ public class KycServiceImpl implements KycService {
 
     }
 
-	/** Returns the active KYC record for the customer. */
+    /**
+     * Returns active KYC record for customer.
+     */
     @Override
     public KycResponse getKycStatus(UUID customerId) {
         KycRecord kyc = kycRepository.findByCustomerCustomerIdAndIsActiveTrue(customerId)
@@ -109,7 +141,10 @@ public class KycServiceImpl implements KycService {
         return kycMapper.toResponse(kyc);
     }
 
-    /** (Admin) Returns all SUBMITTED KYC records pending review. */
+
+    /**
+     * Returns all pending KYC records for admin review.
+     */
     @Override
     public List<KycResponse> getPendingKyc() {
         List<KycResponse> pending = kycRepository.findByStatus(KycStatus.SUBMITTED)
@@ -122,7 +157,8 @@ public class KycServiceImpl implements KycService {
 
     /**
      * {@inheritDoc}
-     *
+     * /**
+     * Checks whether customer KYC is verified.
      * <p>Used by {@link com.example.service.CreditAccountApplicationService} to
      * enforce the KYC gate without accessing the KYC repository directly.
      */

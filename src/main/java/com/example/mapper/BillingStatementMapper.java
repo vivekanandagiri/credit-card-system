@@ -35,11 +35,6 @@ public class BillingStatementMapper {
 	    response.setMinimumDueAmount(statement.getMinimumDueAmount());
 	    response.setRemainingAmount(statement.getRemainingAmount());
 
-	    // ✅ ADD THESE (CRITICAL FIX)
-	    //response.setMinDuePercent(statement.getMinDuePercent());
-	    //response.setMinDueFloor(statement.getMinDueFloor());
-
-	    // ── Optional ──
 	    response.setLateFee(statement.getLateFee());
 
 	    // ── Dates ──

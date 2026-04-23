@@ -77,7 +77,7 @@ class CreditAccountApplicationControllerTest {
                 .thenReturn(response);
 
         CustomUserPrincipal principal =
-                new CustomUserPrincipal(userId, null, "test@test.com", UserRole.CUSTOMER);
+                new CustomUserPrincipal(userId, null, "test@test.com", null, UserRole.CUSTOMER);
 
         mockMvc.perform(post("/api/v1/applications")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -102,7 +102,7 @@ class CreditAccountApplicationControllerTest {
                 .thenReturn(responses);
 
         CustomUserPrincipal principal =
-                new CustomUserPrincipal(userId, null, "test@test.com", UserRole.CUSTOMER);
+                new CustomUserPrincipal(userId, null, "test@test.com", null, UserRole.CUSTOMER);
 
         mockMvc.perform(get("/api/v1/applications")
                         .requestAttr("principal", principal))
@@ -125,7 +125,7 @@ class CreditAccountApplicationControllerTest {
                 .thenReturn(responses);
 
         CustomUserPrincipal principal =
-                new CustomUserPrincipal(userId, null, "test@test.com", UserRole.ADMIN);
+                new CustomUserPrincipal(userId, null, "test@test.com", null, UserRole.ADMIN);
 
         mockMvc.perform(get("/api/v1/applications")
                         .requestAttr("principal", principal))
@@ -150,7 +150,7 @@ class CreditAccountApplicationControllerTest {
                 .thenReturn(response);
 
         CustomUserPrincipal principal =
-                new CustomUserPrincipal(userId, userId, "test@test.com", UserRole.CUSTOMER);
+                new CustomUserPrincipal(userId, userId, "test@test.com", null, UserRole.CUSTOMER);
 
         mockMvc.perform(get("/api/v1/applications/{id}", applicationId)
                         .requestAttr("principal", principal))
@@ -173,7 +173,7 @@ class CreditAccountApplicationControllerTest {
                 .thenReturn(response);
 
         CustomUserPrincipal principal =
-                new CustomUserPrincipal(userId, null, "admin@test.com", UserRole.ADMIN);
+                new CustomUserPrincipal(userId, null, "admin@test.com", null, UserRole.ADMIN);
 
         mockMvc.perform(get("/api/v1/applications/{id}", applicationId)
                         .requestAttr("principal", principal))
@@ -219,7 +219,7 @@ class CreditAccountApplicationControllerTest {
                 .thenReturn(responses);
 
         CustomUserPrincipal principal =
-                new CustomUserPrincipal(userId, null, "admin@test.com", UserRole.ADMIN);
+                new CustomUserPrincipal(userId, null, "admin@test.com", null, UserRole.ADMIN);
 
         mockMvc.perform(get("/api/v1/applications")
                         .param("status", "APPROVED") // 🔥 THIS triggers red line
@@ -242,7 +242,7 @@ class CreditAccountApplicationControllerTest {
                 .thenReturn(responses);
 
         CustomUserPrincipal principal =
-                new CustomUserPrincipal(userId, null, "test@test.com", UserRole.CUSTOMER);
+                new CustomUserPrincipal(userId, null, "test@test.com", null, UserRole.CUSTOMER);
 
         mockMvc.perform(get("/api/v1/applications")
                         .param("status", "APPROVED") // 🔥 important

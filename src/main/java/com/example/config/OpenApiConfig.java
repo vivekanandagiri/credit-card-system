@@ -3,8 +3,6 @@ package com.example.config;
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import io.swagger.v3.oas.annotations.info.Info;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.tags.Tag;
-
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.security.SecurityScheme;
@@ -59,21 +57,6 @@ import org.springframework.context.annotation.Configuration;
                         All secured endpoints require JWT authorization.
                         """
 		),
-
-		tags = {
-				@Tag(name = "Authentication", description = "Authentication APIs"),
-				@Tag(name = "Customer Profile", description = "Customer profile management APIs"),
-				@Tag(name = "Customer Address", description = "Customer address management APIs"),
-				@Tag(name = "KYC Management", description = "KYC submission and verification APIs"),
-				@Tag(name = "Credit Products", description = "Admin Credit Product Management APIs"),
-				@Tag(name = "Credit Account Applications", description = "Credit Account application management APIs"),
-				@Tag(name = "Credit Account API", description = "Credit Account management endpoints"),
-				@Tag(name = "Credit Card API", description = "Credit card management APIs"),
-				@Tag(name = "Card Products", description = "Card product management APIs"),
-				@Tag(name = "Transaction API", description = "Operations related to transactions"),
-				@Tag(name = "Billing Statement API", description = "Billing statement related APIs"),
-				@Tag(name = "Payments", description = "Payment processing APIs")
-		},
 
 		// Apply JWT globally
 		security = @SecurityRequirement(name = "bearerAuth")

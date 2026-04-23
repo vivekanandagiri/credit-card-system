@@ -142,7 +142,7 @@ class CustomerAddressControllerTest {
     // ================= HELPERS =================
 
     private CustomUserPrincipal getPrincipal(UUID userId) {
-        return new CustomUserPrincipal(userId, null, "test@test.com", UserRole.CUSTOMER);
+        return new CustomUserPrincipal(userId, null, "test@test.com", null, UserRole.CUSTOMER);
     }
 
     private ResultActions performPost(UUID userId, Object body) throws Exception {

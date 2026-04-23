@@ -65,21 +65,23 @@ public class SecurityConfig {
             		.authenticationEntryPoint(authenticationEntryPoint) 
             		.accessDeniedHandler(accessDeniedHandler)
             		)
-            
-            .authorizeHttpRequests(auth -> auth
-            		.requestMatchers(
-            	        	"/v3/api-docs/**",
-                            "/swagger-ui/**",
-                            "/swagger-ui.html",
-            	        	"/swagger-ui/index.html").permitAll()
-                    // public end points
-                    .requestMatchers("/api/v1/auth/**").permitAll()
 
-                    // everything else secured
-                    .requestMatchers("/api/v1/credit-product/**").hasRole("ADMIN")
-                    
-                    .anyRequest().authenticated()
-            )
+                .authorizeHttpRequests(auth -> auth
+
+                        // public endpoints
+                        .requestMatchers("/api/v1/auth/**").permitAll()
+
+                        // swagger
+                        .requestMatchers(
+                                "/v3/api-docs/**",
+                                "/swagger-ui/**",
+                                "/swagger-ui.html",
+                                "/swagger-ui/index.html"
+                        ).permitAll()
+
+                        // ✅ everything else requires login
+                        .anyRequest().authenticated()
+                )
             .addFilterBefore(
                     jwtFilter,
                     UsernamePasswordAuthenticationFilter.class

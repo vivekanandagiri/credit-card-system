@@ -7,6 +7,7 @@ import jakarta.annotation.PostConstruct;
 
 import java.time.ZoneId;
 /**
+ * Provide Default Time zone
  * Configuration class for application default timezone.
  *
  * <p>Reads timezone from application properties:

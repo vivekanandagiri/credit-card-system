@@ -39,7 +39,7 @@ import jakarta.validation.Valid;
  *
  * <p>All responses are wrapped in {@link ApiResponse}
  */
-@Tag(name = "KYC Management", description = "APIs for managing KYC verification process")
+@Tag(name = "6. KYC Management", description = "APIs for managing KYC verification process")
 @RequestMapping("/api/v1/kyc")
 public interface KycApi {
 

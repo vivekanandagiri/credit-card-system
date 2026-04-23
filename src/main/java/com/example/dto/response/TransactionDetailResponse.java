@@ -24,9 +24,10 @@ public class TransactionDetailResponse {
     private UUID transactionId;
 
     @Schema(description = "Unique reference number for tracking", example = "TXN123456789")
-    private String referenceNumber;
+    private String internalReference;
     
-    private String transactionReference;
+    @Schema(description = "Unique Network reference number for Idempotency", example = "NET873827387")
+    private String networkReference;
 
     // Card info
     @Schema(description = "Card ID used for transaction")
@@ -36,7 +37,7 @@ public class TransactionDetailResponse {
     private String maskedCardNumber;
 
     @Schema(description = "Card format", example = "VIRTUAL", allowableValues = {"VIRTUAL", "PHYSICAL"})
-    private String cardFormat;
+    private String cardFormat; 
 
     // Account info
     @Schema(description = "Account ID linked to the card")
@@ -72,12 +73,6 @@ public class TransactionDetailResponse {
     @Schema(description = "Merchant category name", example = "GROCERY_STORES")
     private String merchantCategoryName;
 
-    // Balance snapshot
-    @Schema(description = "Balance before transaction", example = "5000.00")
-    private BigDecimal balanceBefore;
-
-    @Schema(description = "Balance after transaction", example = "3499.50")
-    private BigDecimal balanceAfter;
 
     // Decline reason
     @Schema(description = "Reason for decline (if any)", example = "INSUFFICIENT_FUNDS")

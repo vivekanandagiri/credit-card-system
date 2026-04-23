@@ -7,9 +7,9 @@ import java.time.ZoneId;
  *
  * <p><b>Flow:</b>
  * <pre>
- * Frontend → sends timezone (header)
+ * Front-end → sends time-zone (header)
  *        ↓
- * Interceptor → reads timezone
+ * Intercepter → reads timezone
  *        ↓
  * TimezoneContext (ThreadLocal storage)
  *        ↓
@@ -34,20 +34,20 @@ import java.time.ZoneId;
  */
 public class TimezoneContext {
     /**
-     * Thread-local storage for user timezone.
+     * Thread-local storage for user time zone.
      */
     private static final ThreadLocal<ZoneId> USER_ZONE = new ThreadLocal<>();
 
     /**
-     * Sets the timezone for the current request thread.
+     * Sets the time zone for the current request thread.
      *
-     * @param zoneId user's timezone (e.g., Asia/Kolkata)
+     * @param zoneId user's time zone (e.g., Asia/Kolkata)
      */
     public static void setZone(ZoneId zoneId) {
         USER_ZONE.set(zoneId);
     }
     /**
-     * Returns the raw timezone stored in the current thread.
+     * Returns the raw time zone stored in the current thread.
      *
      * <p>May return null if not set.
      *
@@ -57,10 +57,10 @@ public class TimezoneContext {
         return USER_ZONE.get();
     }
     /**
-     * Clears the timezone from the current thread.
+     * Clears the time zone from the current thread.
      *
      * <p><b>Must be called after request completion</b>
-     * (e.g., in a filter or interceptor) to prevent memory leaks.
+     * (e.g., in a filter or intercepter) to prevent memory leaks.
      */
     public static void clear() {
         USER_ZONE.remove();

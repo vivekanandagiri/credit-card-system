@@ -16,19 +16,7 @@ import com.example.enums.StatementStatus;
 
 import jakarta.persistence.LockModeType;
 
-/**
- * GENERATED
-	   ↓
-	  DUE
-	   ↓ partial payment
-	PARTIALLY_PAID
-	   ↓ if amountPaid >= minimumDue by due date
-	   stays PARTIALLY_PAID
-	   ↓ if amountPaid < minimumDue after due date
-	OVERDUE
-	   ↓ if fully paid later
-	PAID
- */
+
 
 public interface BillingStatementRepository extends JpaRepository<BillingStatement, UUID> {
 	

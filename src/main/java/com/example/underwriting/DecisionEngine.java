@@ -148,9 +148,9 @@ public class DecisionEngine {
     	BigDecimal discount;
     	
     	if(riskScore.compareTo(new BigDecimal("95"))>=0) {
-    		discount=new BigDecimal("1.50");
+    		discount=new BigDecimal("1.75");
     	  } else if (riskScore.compareTo(new BigDecimal("90")) >= 0) {
-              discount = new BigDecimal("2.00");
+              discount = new BigDecimal("1.50");
           } else if (riskScore.compareTo(new BigDecimal("85")) >= 0) {
               discount = new BigDecimal("1.00");
           } else {
