@@ -18,6 +18,21 @@ The system models core financial workflows including:
 ---
 
 ## 🛠 Tech Stack
+--
+<p align="center">
+  <img src="https://img.shields.io/badge/Java-17-blue?style=for-the-badge&logo=java" />
+  <img src="https://img.shields.io/badge/Spring%20Boot-Framework-green?style=for-the-badge&logo=springboot" />
+  <img src="https://img.shields.io/badge/PostgreSQL-Database-blue?style=for-the-badge&logo=postgresql" />
+  <img src="https://img.shields.io/badge/Security-JWT-orange?style=for-the-badge&logo=jsonwebtokens" />
+  <img src="https://img.shields.io/badge/Maven-Build-red?style=for-the-badge&logo=apachemaven" />
+  <img src="https://img.shields.io/badge/Tested-JUnit%20%7C%20Mockito-yellow?style=for-the-badge" />
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/github/stars/vivekanandagiri/credit-card-system?style=social" />
+  <img src="https://img.shields.io/github/forks/vivekanandagiri/credit-card-system?style=social" />
+</p>
+
 
 - Java 17  
 - Spring Boot  
@@ -199,7 +214,7 @@ Balance = Credits - Debits
 
 ## 🧱 Project Structure
 
-
+```text
 src/main/java/com/example
 │
 ├── api                 # API contracts / interfaces
@@ -228,6 +243,7 @@ src/main/java/com/example
 │   └── model           # Underwriting models
 │
 └── util                # Utilities (generators, schedulers)
+```
 
 ## Resources Structure
 src/main/resources
