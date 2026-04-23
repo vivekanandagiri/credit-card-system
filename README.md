@@ -113,7 +113,7 @@ The system models core financial workflows including:
 - EXPIRE / REVERSE → Release unused holds  
 
 Key behaviors:
-
+(But here i have not completely implemented the feature, Now Authorization and capture is happening at same time by internal api call 
 - Holds reduce available credit  
 - Ledger updated only after capture  
 - Idempotency via network reference  
@@ -160,7 +160,8 @@ Balance = Credits - Debits
 - Daily interest calculation (APR → Daily Rate)  
 - Time-segmented based on ledger entries  
 - Grace period support  
-- Accurate rounding using BigDecimal  
+- Accurate rounding using BigDecimal 
+- Here i used Simple interest so the interest accumulation is not as per the industry standard which will be implemented later 
 
 ---
 
@@ -225,10 +226,25 @@ src/main/java/com/example
 ├── specification       # Dynamic query filters (JPA Specifications)
 │
 ├── underwriting        # Underwriting engine
-│   └── model           # Underwriting domain models
+│   └── model           # Underwriting model for Credit application evaluation 
 │
 ├── util                # Utility classes (generators, schedulers, helpers)
----
+## Resources Structure
+src/main/resources
+│
+├── db                  # Flyway migration scripts
+├── META-INF            # Metadata
+├── static              # Static resources (if any)
+├── templates           # Templates (if used)
+│
+├── application.properties
+├── application-example.properties
+├── application-test.properties
+
+## Test Resource
+
+src/test/java          # Unit & integration tests
+src/test/resources     # Test configurations
 
 ## 🗄 Database Migrations
 
